@@ -3,13 +3,52 @@
 Created on Fri Jul 15 17:50:25 2016
 
 @author: dario
+
+Base class for Active Inference. It sets up the parameters necessary for
+Actinf based on the input MDP. Add small non-zero probabilities to the required
+matrices to avoid division by zero and extracts parameters from these matrices
+for later use.
+
+By making use of the methods, a full simulation of active inference over all 
+trials is performed. So see an example, see exampleFull().
+
+Uses:
+    While it is possible to use this class on its own by giving the __init__ 
+    function an appropriate MDP object (see below for a definition of an MDP
+    object), the intention is that subclasses are created from it, where this 
+    MDP object is created and used.
+    
+Inputs:
+    Regardless of if the class is to be used alone or to generate subclasses,
+    the MDP object is necessary and must contain the following fields:
+        A       [nO,nS] Observation matrix
+        B       [nU,nS,nS] Transition matrices, where the transitions are
+                defined from the third dimension to the second one, that is,
+                B[0,5,6] is the probability of transitioning from state 6 to
+                state 5, having chosen the action 0.
+        C       [nO] Priors over last observation (goals).
+        D       [nS] Priors over initial state.
+        S       [nS] Real initial state. Must be a vector of zeros, with a
+                single 1 in the element representing the real initial state.
+        V       [nV,nT] All possible policies. 
+        
+
+
+
 """
 import numpy as np
 import scipy as sp
 import utils
 class MDPmodel(object):
     def __init__(self,MDP):
-        self.importMDP(MDP)
+        self.A = MDP.A
+        self.B = MDP.B
+        self.C = MDP.C
+        self.D = MDP.D
+        self.S = MDP.S
+        self.V = MDP.V
+        
+        self.importMDP()
     def importMDP(self):
         # TODO: Fix these parameters properly.
         self.alpha = 8.0

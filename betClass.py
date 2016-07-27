@@ -1,33 +1,49 @@
 # -*- coding: utf-8 -*-
-"""
-Created on Thu Jul 21 13:14:49 2016
+""" 
+Subclass of actinfClass
 
-@author: dario
-"""
+Sets up the necessary matrices to simulate the Kolling_2014 experiments. There
+are two variants: setMDP and setMDPMultVar. The difference between them is in
+whether the action pairs (probabilities and rewards of the risky and safe 
+options) are fixed or are allowed to change. 
 
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Jul 14 17:59:42 2016
+Note that as a subclass of actinfClass, the exampleFull() method is available
+and works with this particular paradigm with no further modification.
 
-@author: dario
-"""
+Uses:
+    The initiation of the class accepts four optional inputs:
+        paradigm        {'kolling','kolling compact','small'} controlls which
+                        type of paradigm is used. For 'kolling', the exact
+                        numbers are used as in kolling_2014. For 'kolling 
+                        compact' similar numbers are used, but total points
+                        and possible rewards are all divided by 10. This 
+                        GREATLY reduces number of states and improves
+                        performance, while maintaining the same scheme. For
+                        'small', only 8 states are used; this is mostly for
+                        testing, as it works very quickly.
+        changePairs     {bool} Controls whether action pairs change from trial
+                        to trial (and thus, are many of them) or whether there
+                        is just one action pair and is fixed throughout the 
+                        experiment. 'True' for the former.
+        actionPairs     dict{risklow, riskhigh, rewlow,rewhigh} dictionary with
+                        the action pair to be used; use only with
+                        changePairs = False. If not provided, defaults of
+                        {0.9,0.3,1,3} will be used. 
 
-# -*- coding: utf-8 -*-
-"""
-Created on Wed Jun 29 16:36:14 2016
-
-@author: dario
 """
 import numpy as np
 import itertools
 import utils
-import actinfClass_new as afc
+import actinfClass as afc
 class betMDP(afc.MDPmodel):
-    def __init__(self, paradigm = 'kolling compact'):
+    def __init__(self, paradigm = 'kolling compact', changePairs = True,
+                 actionPairs = None):
         """
-        Initializes the instance with some required values for the other
-        methods. It can be executed with an extra input, a dictionary with keys
-        nU, nS, nT, thres and obsnoise.
+        Initializes the instance with parameter values depending on the inputs.
+        See the class's help for details on optional inputs.
+        
+        Additionally, calls setMDPMultVar() or setMDP, depending on inputs, to
+        set all the MDP matrices for Active Inference.
         """
         if paradigm == 'kolling':
             self.nS = 2000 #max number of attainable points
@@ -46,9 +62,19 @@ class betMDP(afc.MDPmodel):
         self.thres = 1
         self.obsnoise = 0.001
         
+        if changePairs is True:
+            self.setMDPMultVar()
+        else:
+            self.setMDP(actionPairs)
+        
         
     def setActionPairs(self):
-        # fromwhere \in {'kolling','flat'}
+        """ Sets the action pairs to be used for this instance. Which ones are
+        selected depends on the instance's parameters.
+        
+        There is probably no use of this from the outside. Might be good to
+        make it internal.
+        """
         if self.paradigm == 'small':
             nP = 5;
             pL = np.linspace(0.7,0.9,nP)
@@ -71,6 +97,18 @@ class betMDP(afc.MDPmodel):
 #        return nP, pL, pH, rL, rH
             
     def setMDP(self,parameters = None):
+        """ Sets the observation and transition matrices, as well as the goals,
+        the priors over initial states, the real initial state and the possible
+        policies to evaluate.
+        
+        A single action pair is used for all trials. The probabilities and 
+        reward magnitudes of this pair is set by the actionPairs input to
+        __init__. It can also be taken from the input 'parameters', when
+        calling the method manually.
+        
+        If the action pair is to be specified, the input 'parameter' must be 
+        a dict with entries risklow, riskhigh, rewlow and rewhigh.
+        """
         # checking inputs and assigning defaults if necessary
         if parameters != None:
             if not isinstance(parameters,dict):
@@ -138,7 +176,24 @@ class betMDP(afc.MDPmodel):
         
         self.importMDP(self)
 
-    def setMDPMultVar(self,parameters=None):    
+    def setMDPMultVar(self,parameters=None):  
+        """Sets the observation and transition matrices, as well as the goals,
+        the priors over initial states, the real initial state and the possible
+        policies to evaluate.  
+        
+        A set of action pairs is used here, and are to be selected randomly
+        for each trial during simulations. To do this, a third action is 
+        created, B[2], which is called the evolution action. When chosen, the 
+        action pair changes to a random one (the distribution is not 
+        necessarily constant). All the policies are then injected with a forced
+        third action (B[2]) every other trial, thus doubling the number of 
+        trials; however, since all policies have B[2] every other trial, this
+        action is always chosen and the agent can count on it.
+        
+        If the action pairs are not supplied, they are taken from the method
+        setActionPairs(). Otherwise, they must be provided in a dict with
+        keys pL, pH, rL, rH, which must be numpy arrays of the same length.
+        """
         # Working parameters. To be imported later
         nU = self.nU
         nS = self.nS
