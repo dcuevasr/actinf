@@ -39,6 +39,7 @@ Inputs:
 import numpy as np
 import scipy as sp
 import utils
+
 class MDPmodel(object):
     def __init__(self,MDP):
         self.A = MDP.A
@@ -95,14 +96,15 @@ class MDPmodel(object):
         Decision model for Active Inference. Takes as input the model parameters 
         in MDP, as well as an observation and the prior over the current state.
         """
-        V = self.V
-        w = np.array(range(self.Np))
+        V = Policies
+        cNp = np.shape(V)[0]
+        w = np.array(range(cNp))
         x = PosteriorLastState
         W = PriorPrecision
         a = PastAction
         t = CurrentTime
         T = self.T
-        u = np.zeros(self.Np)
+        u = np.zeros(cNp)
         P = np.zeros(self.Nu)
         # A 'false' set of transition matrices can be fed to the Agent, 
         # depending on the newB input above. No input means that the ones from
@@ -113,8 +115,7 @@ class MDPmodel(object):
             if np.shape(newB) != np.shape(self.B):
                 raise Exception('BadInput: The provided transition matrices'+
                                 ' do not have the correct size')
-            B = newB
-            
+            B = newB   
         # Check whether the policies given are for all time points T or just 
         # for the remaining ones. If for all times T, create an offset so that
         # only the last actions are used.
@@ -123,7 +124,7 @@ class MDPmodel(object):
         else:
             v = self.lnA[Observation,:] + sp.log(sp.dot(B[a],x))
         x = utils.softmax(v)                                             
-        cNp = np.shape(V)[0]
+
         Q = np.zeros(cNp)
         for k in xrange(cNp):
             xt = x
@@ -174,6 +175,7 @@ class MDPmodel(object):
                         np.cumsum(self.A[:,CurrentState]))[0][0]
         return Observation
     def exampleFull(self):
+        print "0"
         """ This is a use example for the Active Inference class. It performs
         inference for all trials in one go.
         
@@ -184,12 +186,16 @@ class MDPmodel(object):
         the posterior distribution over actions at each trial are saved in the
         dictionary Example.
         """
+
+        from time import time
+
+        t1 = time()
         # Check that the class has been fully initiated with a task:
         if hasattr(self, 'lnA') is False:
             raise Exception('NotInitiated: The class has not been initiated'+
                             ' with a task')
         T = self.V.shape[1]
-
+        wV = self.V   # Working set of policies. This will change after choice
         obs = np.zeros(T, dtype=int)    # Observations at time t
         act = np.zeros(T, dtype=int)    # Actions at time t
         sta = np.zeros(T, dtype=int)    # Real states at time t
@@ -206,16 +212,25 @@ class MDPmodel(object):
             obs[t] = self.sampleNextObservation(sta[t])
             # Update beliefs over current state and posterior over actions 
             # and precision
-            bel[t,:], P[t,:], W[t] = self.posteriorOverStates(obs[t], t, self.V,
+            bel[t,:], P[t,:], W[t] = self.posteriorOverStates(obs[t], t, wV,
                                                     PosteriorLastState, 
                                                     PastAction,
                                                     PriorPrecision)
             # Sample an action and the next state using posteriors
             act[t], sta[t+1] = self.sampleNextState( sta[t], P[t,:])
+            # Remove from pool all policies that don't have the selected action
+            tempV = []
+            for seq in wV:
+                if seq[t] == act[t]:
+                    tempV.append(seq)
+            wV = np.array(tempV, dtype = int)
             # Prepare inputs for next iteration
             PosteriorLastState = bel[t]
             PastAction = act[t]
             PriorPrecision = W[t]
+        xt = time() - t1
         self.Example = {'Obs':obs, 'RealStates':sta, 'InfStates':bel, 
-                        'Precision':W, 'PostActions':P, 'Actions':act}
+                        'Precision':W, 'PostActions':P, 'Actions':act,
+                        'xt':xt}
+        print 'Example finished in %f seconds' % xt
         print 'See the Example dictionary for the results\n'

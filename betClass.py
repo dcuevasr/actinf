@@ -168,7 +168,7 @@ class betMDP(afc.MDPmodel):
         self.C = C
         self.D = D
         self.S = S
-        self.V = V
+        self.V = V.astype(int)
         self.alpha = 64
         self.beta = 4
         self.lambd = 0.005 # or 1/4?
@@ -274,7 +274,7 @@ class betMDP(afc.MDPmodel):
         self.C = C
         self.D = D
         self.S = S
-        self.V = V
+        self.V = V.astype(int)
         self.Vs = Vs
         self.alpha = 64
         self.beta = 4
