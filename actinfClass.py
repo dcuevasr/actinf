@@ -74,9 +74,9 @@ class MDPmodel(object):
         for b in xrange(np.shape(self.B)[0]):
             self.B[b] = self.B[b]/np.sum(self.B[b],axis=0)
             
-        self.C = sp.tile(self.C,(self.No,1)).T
+#        self.C = sp.tile(self.C,(self.No,1)).T
         self.C += (np.min(self.C)==0)*p0
-        self.C = self.C/np.sum(self.C)
+        self.C = self.C/self.C.sum(axis=0)
         self.lnC = np.log(self.C)
         
         self.D += (np.min(self.D)==0)*p0
@@ -133,7 +133,7 @@ class MDPmodel(object):
                 xt = sp.dot(B[V[k,j]],xt)
                 ot = sp.dot(self.A,xt)
                 # Predicted Divergence
-                Q[k] += sp.dot(self.H,xt) + sp.dot(self.lnC[:,j] - 
+                Q[k] += sp.dot(self.H,xt) + sp.dot(self.lnC - 
                         sp.log(ot),ot)
                         
         # Variational updates: calculate the distribution over actions, then the
@@ -175,7 +175,6 @@ class MDPmodel(object):
                         np.cumsum(self.A[:,CurrentState]))[0][0]
         return Observation
     def exampleFull(self):
-        print "0"
         """ This is a use example for the Active Inference class. It performs
         inference for all trials in one go.
         
@@ -232,5 +231,5 @@ class MDPmodel(object):
         self.Example = {'Obs':obs, 'RealStates':sta, 'InfStates':bel, 
                         'Precision':W, 'PostActions':P, 'Actions':act,
                         'xt':xt}
-        print 'Example finished in %f seconds' % xt
+#        print 'Example finished in %f seconds' % xt
         print 'See the Example dictionary for the results\n'

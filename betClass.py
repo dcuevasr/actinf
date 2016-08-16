@@ -49,17 +49,23 @@ class betMDP(afc.MDPmodel):
             self.nS = 2000 #max number of attainable points
             self.paradigm = 'kolling'
             self.pdivide = 1
+            self.thres = 1000
+            self.nT = 8
         elif paradigm == 'kolling compact':
             self.nS = 200
             self.paradigm = 'kolling'
             self.pdivide = 10
+            self.nT = 7
+            self.thres = 100
         else:
             self.nS = 8
+            self.thres = 1
             self.paradigm = 'small'
+            self.nT = 5
         
-        self.nU = 3
-        self.nT = 8
-        self.thres = 1
+        self.nU = 2
+
+
         self.obsnoise = 0.001
         
         if changePairs is True:
@@ -136,7 +142,7 @@ class betMDP(afc.MDPmodel):
         A = A/sum(A)
         
         # Define transition matrices
-        B = np.zeros((self.nU-1,self.nS,self.nS))
+        B = np.zeros((self.nU,self.nS,self.nS))
         B[0] = np.diag(risklow*np.ones(self.nS-rewlow),-rewlow)
         np.fill_diagonal(B[0], 1-risklow)
         B[0][-1,(-1-rewlow):-1] = risklow
@@ -151,7 +157,7 @@ class betMDP(afc.MDPmodel):
         C = np.zeros(self.nS)
         C[-self.thres:] = 1
         C = C/sum(C)
-        
+
         # Priors over initial state
         D = np.zeros(self.nS)
         D[0] = 1
@@ -160,7 +166,7 @@ class betMDP(afc.MDPmodel):
         S = D.astype(int)
         
         # Policies: all combinations of 2 actions
-        V = np.array(list(itertools.product(range(0,self.nU-1),repeat = self.nT)))
+        V = np.array(list(itertools.product(range(0,self.nU),repeat = self.nT)))
         
         # Preparing inputs for MDP
         self.A = A
@@ -174,7 +180,7 @@ class betMDP(afc.MDPmodel):
         self.lambd = 0.005 # or 1/4?
         self.gamma = 20
         
-        self.importMDP(self)
+        self.importMDP()
 
     def setMDPMultVar(self,parameters=None):  
         """Sets the observation and transition matrices, as well as the goals,
@@ -230,20 +236,16 @@ class betMDP(afc.MDPmodel):
             for p in xrange(nP):
                 nextsL = np.min((s+rL[p],nS-1)).astype(int)
                 nextsH = np.min((s+rH[p],nS-1)).astype(int)
-                B[0,np.ravel_multi_index([nextsL,p],(nS,nP),order='F'),
-                  np.ravel_multi_index([s,p],(nS,nP),order='F')] = pL[p]
-                B[0,np.ravel_multi_index([s,p],(nS,nP),order='F'),
-                  np.ravel_multi_index([s,p],(nS,nP),order='F')] = 1 - pL[p]
-                B[1,np.ravel_multi_index([nextsH,p],(nS,nP),order='F'),
-                  np.ravel_multi_index([s,p],(nS,nP),order='F')] = pH[p]
-                B[1,np.ravel_multi_index([s,p],(nS,nP),order='F'),
-                  np.ravel_multi_index([s,p],(nS,nP),order='F')] = 1 - pH[p]
+                mixL = utils.allothers([[nextsL],range(nP)],(nS,nP))
+                mixH = utils.allothers([[nextsH],range(nP)],(nS,nP))
+                this = utils.allothers([[s]     ,range(nP)],(nS,nP))
+                ifrom = [np.ravel_multi_index([s,p],(nS,nP),order='F')]
+                B[np.ix_([0], mixL, ifrom)] = pL[p]/nP
+                B[np.ix_([0], this, ifrom)] = (1 - pL[p])/nP
+                B[np.ix_([1], mixH, ifrom)] = pH[p]/nP
+                B[np.ix_([1], this, ifrom)] = (1 - pH[p])/nP
                   
-        
-        for s in xrange(nS):
-            allothers = np.array(utils.allothers([[s],range(nP),[0]],(nS,nP)))
-            allothers = allothers.astype(int)
-            B[np.ix_([2],allothers,allothers)] = 1
+
             
         # Define priors over last state (goal)
         C = np.zeros(nS*nP)
@@ -251,7 +253,6 @@ class betMDP(afc.MDPmodel):
                                               (nS,nP)))
         C[allothers] = 1
         C = C/sum(C)
-        
         # Priors over initial state
         D = np.zeros(nS*nP)
         D[0] = 1
@@ -260,13 +261,13 @@ class betMDP(afc.MDPmodel):
         S = D.astype(int)
         
         # Policies: all combinations of 2 actions
-        V = np.array(list(itertools.product(range(0,nU-1),repeat = nT)))
-        Vs = V.copy()
+        V = np.array(list(itertools.product(range(0,nU),repeat = nT)))
+#        Vs = V.copy()
         # Put the evolution action after every action
-        v1, v2 = np.shape(V)
-        twos = 2*np.ones((v1,v2))
-        V = np.reshape(np.concatenate((V,twos)),(v1,2*v2), order='F')
-        V = np.delete(V,V.shape[1]-1,axis=1)
+#        v1, v2 = np.shape(V)
+#        twos = 2*np.ones((v1,v2))
+#        V = np.reshape(np.concatenate((V,twos)),(v1,2*v2), order='F')
+#        V = np.delete(V,V.shape[1]-1,axis=1)
         
         # Preparing inputs for MDP
         self.A = A
@@ -275,7 +276,7 @@ class betMDP(afc.MDPmodel):
         self.D = D
         self.S = S
         self.V = V.astype(int)
-        self.Vs = Vs
+#        self.Vs = Vs
         self.alpha = 64
         self.beta = 4
         self.lambd = 0.005 # or 1/4?
