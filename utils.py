@@ -9,7 +9,7 @@ import numpy as np
 
 def ismember(A,B):
     return np.array([np.sum(a == B) for a in A]).astype(bool)
-    
+
 def softmax(A):
 
     if type(A) is not np.ndarray:
@@ -17,17 +17,18 @@ def softmax(A):
     else:
         if np.prod(np.shape(A)) != np.shape(A)[0]:
             raise Exception('Only vectors are accepted!')
-                 
+    maxA = A.max()
+    A = A - maxA
     A = np.exp(A)
     A = A/np.sum(A)
     return A
-    
+
 def allothers(Indices, Dimensions):
     """
      Using np.ravel_multi_index, return an np.array of all the linear indices
      pertaining all the possible combinations of indices in Indices, assuming
      an array of dimensions specified in Dimensions.
-    
+
      Given that it uses three for-loops, it is highly inefficient. Use only
      for small sets of indices.
     """
@@ -35,7 +36,7 @@ def allothers(Indices, Dimensions):
         Indices.append([0])
     if len(Indices)!=3:
         raise Exception('Waaa?')
-        
+
     if len(Dimensions)==2:
         Dimensions = Dimensions + (1,)
     Iout = []

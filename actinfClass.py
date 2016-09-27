@@ -9,15 +9,15 @@ Actinf based on the input MDP. Add small non-zero probabilities to the required
 matrices to avoid division by zero and extracts parameters from these matrices
 for later use.
 
-By making use of the methods, a full simulation of active inference over all 
+By making use of the methods, a full simulation of active inference over all
 trials is performed. So see an example, see exampleFull().
 
 Uses:
-    While it is possible to use this class on its own by giving the __init__ 
+    While it is possible to use this class on its own by giving the __init__
     function an appropriate MDP object (see below for a definition of an MDP
-    object), the intention is that subclasses are created from it, where this 
+    object), the intention is that subclasses are created from it, where this
     MDP object is created and used.
-    
+
 Inputs:
     Regardless of if the class is to be used alone or to generate subclasses,
     the MDP object is necessary and must contain the following fields:
@@ -30,8 +30,8 @@ Inputs:
         D       [nS] Priors over initial state.
         S       [nS] Real initial state. Must be a vector of zeros, with a
                 single 1 in the element representing the real initial state.
-        V       [nV,nT] All possible policies. 
-        
+        V       [nV,nT] All possible policies.
+
 
 
 
@@ -40,7 +40,7 @@ import numpy as np
 import scipy as sp
 import utils
 
-class MDPmodel(object):
+class Actinf(object):
     def __init__(self,MDP):
         self.A = MDP.A
         self.B = MDP.B
@@ -48,54 +48,66 @@ class MDPmodel(object):
         self.D = MDP.D
         self.S = MDP.S
         self.V = MDP.V
-        
+
         self.importMDP()
-    def importMDP(self):
+    def importMDP(self, SmallestProbability = True):
+        """ Adds a smallest probability of exp(-16) to all the matrices, to
+        avoid real infinitums. It also defines lnA, lnC, lnD and H.
+
+        Setting SmallestProbability to False adds nothing to the matrices but
+        still defines the logarithms and H. H is a matrix of zeros in this
+        case.
+        """
         # TODO: Fix these parameters properly.
-        self.alpha = 8.0
-        self.Beta = 4.0
-        self.g = 1.0
-        self.lambd = 0.0
+#        self.alpha = 8.0
+#        self.Beta = 4.0
+#        self.g = 20.0
+#        self.lambd = 1.0
         self.N = 4
         self.T = np.shape(self.V)[1]
-        
+
         self.Ns = np.shape(self.B)[1] # Number of hidden states
         self.Nu = np.shape(self.B)[0] # Number of actions
         self.Np = np.shape(self.V)[0]
         self.No = np.shape(self.A)[0]
-        
-        # If the matrices A, B, C or D have any zero components, add noise and 
+
+        # If the matrices A, B, C or D have any zero components, add noise and
         # normalize again.
-        p0 = np.exp(-16.0) # Smallest probability
+        if SmallestProbability is True:
+            p0 = np.exp(-16.0) # Smallest probability
+        else:
+            p0 = 0
         self.A += (np.min(self.A)==0)*p0
         self.A = sp.dot(self.A,np.diag(1/np.sum(self.A,0)))
-        
+
         self.B += (np.min(self.B)==0)*p0
         for b in xrange(np.shape(self.B)[0]):
             self.B[b] = self.B[b]/np.sum(self.B[b],axis=0)
-            
-#        self.C = sp.tile(self.C,(self.No,1)).T
+
         self.C += (np.min(self.C)==0)*p0
         self.C = self.C/self.C.sum(axis=0)
-        self.lnC = np.log(self.C)
-        
+
         self.D += (np.min(self.D)==0)*p0
         self.D = self.D/np.sum(self.D)
-        self.lnD = np.log(self.D)
-        
-        self.S = self.S
-        
+
+
         self.lnA = sp.log(self.A)
-        self.H = np.sum(self.A*self.lnA,0)
-        
-        self.V = self.V
+        self.lnC = np.log(self.C)
+        self.lnD = np.log(self.D)
+
+        if SmallestProbability is True:
+            self.H = np.sum(self.A*self.lnA,0)
+        else:
+            self.H = np.zeros(self.Ns)
+
     def posteriorOverStates(self, Observation, CurrentTime, Policies,
-                            PosteriorLastState, PastAction, 
+                            PosteriorLastState, PastAction,
                             PriorPrecision, newB = None):
         """
-        Decision model for Active Inference. Takes as input the model parameters 
+        Decision model for Active Inference. Takes as input the model parameters
         in MDP, as well as an observation and the prior over the current state.
         """
+        import math
         V = Policies
         cNp = np.shape(V)[0]
         w = np.array(range(cNp))
@@ -106,7 +118,8 @@ class MDPmodel(object):
         T = self.T
         u = np.zeros(cNp)
         P = np.zeros(self.Nu)
-        # A 'false' set of transition matrices can be fed to the Agent, 
+
+        # A 'false' set of transition matrices can be fed to the Agent,
         # depending on the newB input above. No input means that the ones from
         # the actinf class are used:
         if newB is None:
@@ -115,43 +128,45 @@ class MDPmodel(object):
             if np.shape(newB) != np.shape(self.B):
                 raise Exception('BadInput: The provided transition matrices'+
                                 ' do not have the correct size')
-            B = newB   
-        # Check whether the policies given are for all time points T or just 
-        # for the remaining ones. If for all times T, create an offset so that
-        # only the last actions are used.
+            B = newB
+
         if t==0:
             v = self.lnA[Observation,:] + self.lnD
         else:
             v = self.lnA[Observation,:] + sp.log(sp.dot(B[a],x))
-        x = utils.softmax(v)                                             
+        x = utils.softmax(v)
 
         Q = np.zeros(cNp)
+
         for k in xrange(cNp):
             xt = x
             for j in xrange(t,T):
                 # transition probability from current state
-                xt = sp.dot(B[V[k,j]],xt)
-                ot = sp.dot(self.A,xt)
+                xt = sp.dot(B[V[k, j],:,:], xt)
+                ot = sp.dot(self.A, xt)
                 # Predicted Divergence
-                Q[k] += sp.dot(self.H,xt) + sp.dot(self.lnC - 
-                        sp.log(ot),ot)
-                        
+                Q[k] += self.H.dot(xt) + (self.lnC - np.log(ot)).dot(ot)
+
+#        self.oQ.append(Q)
+#        self.oV.append(V)
         # Variational updates: calculate the distribution over actions, then the
         # precision, and iterate N times.
         b = self.alpha/W # Recover b 'posterior' (or prior or whatever) from precision
         for i in xrange(self.N):
             # policy (u)
-            u[w] = utils.softmax(sp.dot(W,Q))
+            u[w] = utils.softmax(W*Q)
             # precision (W)
-            b = self.lambd*b + (1 - self.lambd)*(self.Beta - 
-                sp.dot(u[w],Q))            
+            b = self.lambd*b + (1 - self.lambd)*(self.beta -
+                sp.dot(u[w],Q))
             W = self.alpha/b
+            if math.isnan(W):
+                raise Exception('stoooop')
         # Calculate the posterior over policies and over actions.
         for j in xrange(self.Nu):
             P[j] = np.sum(u[w[utils.ismember(V[:,t],j)]])
-            
+
         return x, P, W
-     
+
     def sampleNextState(self,CurrentState, PosteriorAction):
         """
         Samples the next action and next state based on the Posteriors
@@ -159,13 +174,13 @@ class MDPmodel(object):
         s = CurrentState
         P = PosteriorAction
         NextAction = np.nonzero(np.random.rand(1) < np.cumsum(P))[0][0]
-        NextState = np.nonzero(np.random.rand(1) < 
+        NextState = np.nonzero(np.random.rand(1) <
                     np.cumsum(self.B[NextAction,:,s.astype(int)]))[0][0]
         return NextAction, NextState
     def sampleNextObservation(self,CurrentState):
         """
         Samples the next observation given the current state.
-        
+
         The state can be given as an index or as a vector of zeros with a
         single One in the current state.
         """
@@ -174,13 +189,13 @@ class MDPmodel(object):
         Observation = np.nonzero(np.random.rand(1) <
                         np.cumsum(self.A[:,CurrentState]))[0][0]
         return Observation
-    def exampleFull(self):
+    def exampleFull(self, printTime = False):
         """ This is a use example for the Active Inference class. It performs
         inference for all trials in one go.
-        
+
         For this example to work, the class must be already initiated with a
         specific task (e.g. bet task from Kolling 2014).
-        
+
         The resulting Observations, States, inferred states, taken Actions and
         the posterior distribution over actions at each trial are saved in the
         dictionary Example.
@@ -201,20 +216,27 @@ class MDPmodel(object):
         bel = np.zeros((T,self.Ns))      # Inferred states at time t
         P   = np.zeros((T, self.Nu))
         W   = np.zeros(T)
+        # Matrices for diagnostic purposes. If deleted, also deleted the
+        # corresponding ones in posteriorOverStates:
+        self.oQ = []
+        self.oV = []
+        self.oH = []
+
         sta[0] = np.nonzero(self.S)[0][0]
         # Some dummy initial values:
-        PosteriorLastState = 1
+        PosteriorLastState = self.D
         PastAction = 1
-        PriorPrecision = 1
+        PriorPrecision = self.gamma
         for t in xrange(T-1):
             # Sample an observation from current state
             obs[t] = self.sampleNextObservation(sta[t])
-            # Update beliefs over current state and posterior over actions 
+            # Update beliefs over current state and posterior over actions
             # and precision
             bel[t,:], P[t,:], W[t] = self.posteriorOverStates(obs[t], t, wV,
-                                                    PosteriorLastState, 
+                                                    PosteriorLastState,
                                                     PastAction,
                                                     PriorPrecision)
+
             # Sample an action and the next state using posteriors
             act[t], sta[t+1] = self.sampleNextState( sta[t], P[t,:])
             # Remove from pool all policies that don't have the selected action
@@ -228,8 +250,151 @@ class MDPmodel(object):
             PastAction = act[t]
             PriorPrecision = W[t]
         xt = time() - t1
-        self.Example = {'Obs':obs, 'RealStates':sta, 'InfStates':bel, 
+        self.Example = {'Obs':obs, 'RealStates':sta, 'InfStates':bel,
                         'Precision':W, 'PostActions':P, 'Actions':act,
                         'xt':xt}
-#        print 'Example finished in %f seconds' % xt
-        print 'See the Example dictionary for the results\n'
+        if printTime is True:
+            print 'Example finished in %f seconds' % xt
+
+#        print 'See the Example dictionary for the results\n'
+
+    def plot_action_posteriors(self, posterior_over_actions = None):
+        """ Stacked bar plot of the posteriors over actions at each trial
+        """
+        import matplotlib.pyplot as plt
+        if posterior_over_actions is not None:
+            postA = posterior_over_actions
+        else:
+            postA = self.Example['PostActions']
+
+
+        nT, nU = postA.shape
+
+        width = 0.5
+        bottoms = np.zeros(nT)
+        plt.figure(1)
+        for act in xrange(nU):
+            ccolor = (act%2)*'g' + ((act+1)%2)*'y'
+            plt.bar(range(1,nT+1), postA[:,act], width, bottom = bottoms,
+                    color = ccolor)
+            bottoms += postA[:,act]
+        plt.show()
+
+    def plot_real_states(self, real_states = None, which_real = None):
+        """ Plots the real states visited by the agent.
+
+        When a which_real parameter is provided, only the physical states are
+        plotted, which are assumed to be the first dimension of an array (in
+        fortran ordering). The value of which_real, when provided, is taken
+        to be the number of physical states.
+        """
+        import matplotlib.pyplot as plt
+        import numpy as np
+
+        if real_states is not None:
+            S = real_states
+        else:
+            S = self.Example['RealStates']
+
+        nS = self.Ns
+        nT = S.size
+        if which_real is not None:
+            rem = which_real
+        else:
+            rem = self.nS
+
+
+        S = S%rem
+        nS = rem
+        Smatrix = np.zeros((nS,nT))
+        Smatrix[S[:-1], range(nT-1)] = 1
+
+        maxy_plot = max(S.max(), self.thres)*1.2
+
+        plt.figure()
+        plt.plot(S,'+-')
+        plt.plot(range(nT), np.ones(nT)*self.thres)
+        plt.ylim([0, maxy_plot])
+        plt.ylabel('Accumulated points')
+        plt.xlabel('Trial')
+
+        plt.show
+
+class MDPmodel(Actinf):
+    """ For compatibility with older implementations of tasks that might still
+    want to call with the old name.
+    """
+    def __init__(self, MDP):
+        super(MDPmodel,self).__init__(MDP)
+
+
+
+
+
+class CurrentState(object):
+    """ Holds the current state for active inference.
+    Both real states and inferred states can be represented with this class.
+    """
+    def __init__(self, nSr, nSi):
+        self.nSr = nSr
+        self.nSi = nSi
+        self.nStot = nSr * nSi
+
+    def separate_states(self, fullState, just_return = False):
+        """ Separates the current full state into relevant and irrelevant. It
+        is assumed that the first index to move is the relevant one; this means
+        that states 1 to nSr are taken to be all the relevant states for the
+        first value of the irrelevant states.
+
+        To separate, it is assumed that the probability of a given state is
+        given as the sum over all irrelevant states:
+        p(s^{rel}_x) = \displaystyle \sum _{n=1}^{N} p(s^{rel}_x, s^{irr}_n)
+
+        Equivalently for irrelevant states.
+        """
+        S = np.reshape(fullState,(self.nSr, self.nSi), order='F')
+        Sr = S.sum(axis=1)
+        Si = S.sum(axis=0)
+        if just_return is False:
+            self.Sr = Sr
+            self.Si = Si
+        else:
+            return Sr, Si
+
+    def join_states(self, relStates, irrStates, just_return = False):
+        """ Generates the full state from the current separated states. To
+        calculate the probability of any (Srel, Sirr) combined state, the
+        probabilities of the separated states are multiplied.
+
+        This implementation assumes that p(rel,irr) = p(rel)p(irr), which might
+        not be valid for a given generative model.
+
+        To calculate the joint state without setting it to self.S, use the
+        optional input just_return=True
+        """
+        # TODO: Add the possibility of calculating the joint states'
+        #       probabilities with another function.
+        S = np.matrix(relStates).T*np.matrix(irrStates)
+        S = np.reshape(S, (self.nStot,1), order='F')
+        if just_return is False:
+            self.S = S
+        else:
+            return S
+
+    def separate_actions(self, B, just_return = False):
+        """ Separates the transition matrices B into relevant and irrelevant.
+        """
+        nU = B.shape[0]
+
+        Brel = np.zeros((nU, self.nSr, self.nSr))
+        for u in xrange(nU):
+            for rel in xrange(self.nSr):
+                rel_indices = utils.allothers([range(self.nSr),[0]],
+                                              (self.nSr,self.nSr))
+                Brel[u,:,rel] = B[u, rel_indices, rel]
+        if just_return is False:
+            self.Brel = Brel
+        else:
+            return Brel
+
+
