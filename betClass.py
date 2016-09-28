@@ -85,7 +85,7 @@ class betMDP(afc.Actinf):
             thres = threshold
 
         C = np.zeros(self.nS*self.nP)
-        allothers = np.array(utils.allothers([range(self.nS-thres,self.nS),
+        allothers = np.array(utils.allothers([range(thres,self.nS),
                                               range(self.nP)],
                                               (self.nS,self.nP)))
         C[allothers] = 1
@@ -185,7 +185,7 @@ class betMDP(afc.Actinf):
 
         # Define priors over last state (goal)
         C = np.zeros(self.nS)
-        C[-self.thres:] = 1
+        C[self.thres:] = 1
         C = C/sum(C)
 
         # Priors over initial state
@@ -354,3 +354,64 @@ class betMDP(afc.Actinf):
         table_headers = ['Trial','State','Act Pair', 'Action', 'expL', 'expH',
                          'ProbAct0', 'ProbAct1']
         print tabulate(table_data, headers = table_headers)
+
+
+    def all_points_and_trials(self):
+        """ Wrapper to do all_points_and_trials_small/big, depending on the
+        paradigm
+        """
+        if self.paradigm=='small':
+            points, trials_needed = self.all_points_and_trials_small()
+            return points, trials_needed
+        elif self.paradigm=='kolling compact':
+            print 'Sorry, not yet implemented'
+            # TODO: Implement
+            return None, None
+        else:
+            print 'Unknown paradigm'
+            return None, None
+
+
+    def all_points_and_trials_small(self):
+        """ Calculates all the possible points attainable during this task, and
+        all the possible number of trials in which the agent could have gotten
+        each of these points.
+
+        The 'runs' in which the points go over the threshold are eliminated, so
+        that the ouputs are not so big.
+
+        TODO: Implement a switch to keep all runs
+
+        Outputs:
+            points              Array with all the possible number of points
+                                that can be gained in this game.
+            trials_needed       Array that, for every element of 'points' (see
+                                above) has the minimum number of trials needed
+                                to attain them.
+        """
+        import itertools
+
+        rL = self.rL
+        rH = self.rH
+        actPairs = np.unique(np.concatenate(([0],rL, rH)))
+        numberActPairs = actPairs.size
+        # All possible combinations of 3 actions (lose, win high, win low):
+        Vb = np.array(list(itertools.product(range(numberActPairs),
+                                             repeat = self.nT)))
+
+        # Number of trials needed for a given number of points:
+        trialsNeeded = np.zeros(Vb.shape[0])
+        # Calculate these points (save in V).
+        for r, row in enumerate(Vb):
+            trialsNeeded[r] = np.sum(Vb[r,Vb[r,:]>0])
+        points = np.sum(Vb, axis=1) #Points gained
+        under_thres = points<self.thres
+        points = points[under_thres]
+        trialsNeeded = trialsNeeded[under_thres]
+
+        uniquePoints = np.unique(points)
+        uniqueTrials = np.zeros(uniquePoints.shape, dtype = np.int64)
+        for i, up in enumerate(uniquePoints):
+            uniqueTrials[i] = min(trialsNeeded[points == up])
+
+        return uniquePoints, uniqueTrials
