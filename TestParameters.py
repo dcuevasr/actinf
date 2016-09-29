@@ -49,9 +49,12 @@ def setForcedObservations(mdp, nPerms=10, sPerms = 10):
                                 +mdp.rH[ranPerms[per,tr-1]]*(V[v,tr-1]==1))
                                 *(sucPerms[ac,tr-1]==1))
     return state, sucPerms, ranPerms
-def setPriorGoals(mdp,selectShape='flat', rampSlope = 1,
-                  Gmean = 'change', Gscale = 100):
-    """ Sets priors over last state (goals) in different shapes for testing
+def setPriorGoals(mdp,selectShape='flat', rampX1 = None,
+                  Gmean = None, Gscale = None,
+                  convolute = True, just_return = True):
+    """ Wrapper for the functions priorGoalsFlat/Ramp/Unimodal.
+
+    Sets priors over last state (goals) in different shapes for testing
     the effects on the agent's behavior.
 
     The three options are 'flat', which is what is normally set in cbet.py,
@@ -59,69 +62,166 @@ def setPriorGoals(mdp,selectShape='flat', rampSlope = 1,
     which uses a Gaussian to set up a 'hump' after threshold.
 
     Uses:
-        goals = setPriorGoals(mdp [,selectShape] [, rampSlope] [, Gmean]
-                              [, Gscale])
+        goals = setPriorGoals(mdp [,selectShape] [, rampX1] [, Gmean]
+                              [, Gscale] [,convolute] [,just_return])
 
     Inputs:
         selectShape         {'flat','ramp','unimodal'} selects which shape is
                             to be used. When selecting 'ramp', the optional
-                            input rampSlope can be selected (default 1). When
+                            input rampX1 can be selected (default 1). When
                             using 'unimodal', Gmean and Gscale can be set to
                             change the mean (in Trial number) and scale of the
                             Gaussian. Selecting a Gmean pre-threshold will
                             cause the 'hump' to be invisible and the priors
                             will be an exponential ramp down.
-        rampSlope           {x} determines the slope of the ramp.
+        rampX1              {x} determines the initial point for the ramp,
+                            which uniquely determines the slope of the ramp.
         Gmean, Gscale       {x}{y} determine the mean and the scale of the
                             Gaussian for the unimodal version.
     Outputs:
+        (Note: when just_return is False, nothing is returned)
         goals               [nS] are the resulting priors over last state.
     """
-    from utils import allothers
-    goals = np.zeros(mdp.nS*mdp.nP, dtype = float)
-    # selectSpape \in {'flat','ramp','unimodal'}
     if selectShape == 'flat':
-        indices = np.array(allothers([range(mdp.nS - mdp.thres,mdp.nS),
-                                      range(mdp.nP)], (mdp.nS,mdp.nP)),
-                                     dtype = int)
-        goals[indices] = 1.0/indices.size
+        goals = priorGoalsFlat(mdp, convolute, just_return = True)
     elif selectShape == 'ramp':
-        stateRamp = np.arange(0,mdp.thres,rampSlope, dtype = float) + 1
-        istateR = np.arange(mdp.nS - mdp.thres, mdp.nS, dtype=int)
+        if rampX1 is None:
+            raise ValueError('A value for rampX1 must be provided when using'+
+                            ' ''ramp''')
+        goals = priorGoalsRamp(mdp, rampX1 = rampX1,
+                               convolute = convolute, just_return = True)
+    elif selectShape == 'unimodal':
+        if Gscale is None or Gmean is None:
+            raise ValueError('Values for Gmean and Gscale must be provided '+
+                             'when using ''unimodal''')
+        goals = priorGoalsUnimodal(mdp, Gmean, Gscale, convolute = convolute,
+                                   just_return = True)
+    else:
+        raise ValueError('selectShape can only be ''flat'', ''ramp'' or '+
+                        '''unimodal''')
+    if just_return is True:
+        return goals
+    elif just_return is False and convolute is True:
+        mdp.C = goals
+    else:
+        raise ValueError('Bad combination of just_return and convolute')
+
+
+def priorGoalsFlat(mdp, convolute = True, just_return = True):
+    from utils import allothers
+
+    if convolute is True:
+        goals = np.zeros(mdp.nS*mdp.nP, dtype = float)
+
+        indices = np.array(allothers([range(mdp.thres,mdp.nS),
+                                  range(mdp.nP)], (mdp.nS,mdp.nP)),
+                                 dtype = int)
+        goals[indices] = 1.0/indices.size
+    elif convolute is False:
+        goals = np.zeros(mdp.nS, dtype = float)
+        goals[mdp.thres:] = 1.0/goals[mdp.thres:].size
+
+    if just_return is True:
+        return goals
+    if just_return is False and convolute is True:
+        mdp.C = goals
+    else:
+        raise ValueError('Bad combination of just_return and convolute')
+
+
+def priorGoalsRamp(mdp, rampX1, convolute = True, just_return = True):
+    """ Creates goals as an increasing or decreasing ramp, depending on the
+    value given for rampX1.
+
+    rampX1 is the initial value. That is, the value of the first point
+    after threshold. If rampX1 is smaller than M (where M is the number of
+    points past-threshold), then the ramp is increasing. The slope is
+    calculated automatically (since rampX1 determines it uniquely).
+    """
+    from utils import allothers
+
+
+    thres = mdp.thres
+    nS = mdp.nS
+    pastThres = nS - thres
+    nP = mdp.nP
+
+    minX1 = 0
+    maxX1 = 2.0/pastThres
+
+    if rampX1<minX1 or rampX1>maxX1:
+        raise ValueError ('Initial point X1 is outside of allowable '+
+                          'limits for this task. min = %f, max = %f' % (minX1,
+                          maxX1))
+    if rampX1 == 1.0/pastThres:
+        raise ValueError('rampX1 is invalid. For this value, use ''flat'''+
+                            ' instead')
+
+    slope = (2.0/pastThres - 2.0*rampX1)/(pastThres-1)
+
+    stateRamp = rampX1 + slope*np.arange(pastThres)
+
+    istateR = np.arange(mdp.thres, mdp.nS)
+
+    if convolute is False:
+        goals = np.zeros(nS)
+        goals[thres:] = stateRamp
+    else:
+        goals = np.zeros(nS*nP)
         for ix,vx in enumerate(istateR):
             indices = np.array(allothers([[vx],range(mdp.nP)],(mdp.nS,mdp.nP)))
             goals[indices] = stateRamp[ix]
         goals = goals/goals.sum()
-#        goals[range(mdp.nS-mdp.thres, mdp.nS)] = stateRamp
-    elif selectShape == 'unimodal':
-        from scipy.stats import norm
-        if Gmean == 'change':
-            Gmean = mdp.nS - mdp.thres
-        points = np.arange(mdp.nS)
-        npoints = norm.pdf(points, Gmean, Gscale)
-        npoints[:(mdp.nS - mdp.thres)] = 0
-        istateR = np.arange(mdp.nS - mdp.thres, mdp.nS, dtype=int)
+    if just_return is True:
+        return goals
+    elif just_return is False and convolute is True:
+        mdp.C = goals
+    else:
+        raise ValueError('Bad combination of just_return and convolute')
+
+
+
+def priorGoalsUnimodal(mdp, Gmean, Gscale,
+                       convolute = True, just_return = True):
+    """ Sets the priors over last state (goals) to a Gaussian distribution,
+    defined by Gmean and Gscale.
+    """
+    from utils import allothers
+    from scipy.stats import norm
+
+    points = np.arange(mdp.nS)
+    npoints = norm.pdf(points, Gmean, Gscale)
+    npoints[:mdp.thres] = 0
+    if convolute is False:
+        goals = npoints
+    else:
+        goals = np.zeros(mdp.Ns)
+        istateR = np.arange(mdp.thres, mdp.nS, dtype=int)
         for ix,vx in enumerate(istateR):
             indices = np.array(allothers([[vx],range(mdp.nP)],(mdp.nS,mdp.nP)))
             goals[indices] = npoints[vx]
         goals = goals/goals.sum()
+
+    if just_return is True:
+        return goals
+    elif just_return is False and convolute is True:
+        mdp.C = goals
     else:
-        raise Exception('BadInput: ''selectShape'' must be from' +
-                        '{''flat'',''ramp'',''unimodal''}')
-    return goals
+        raise ValueError('Bad combination of just_return and convolute')
+
 
 def setGammaPriors():
     # TODO: implement
-    pass
+    raise NotImplementedError('Maybe on Tuesday I will get around to it...')
 
 def setForcedObservationMatrix(selectShape='gaussian'):
     # selectShape selects how to modify the observation matrix
     # TODO: implement
-    pass
+    raise NotImplementedError('Stop nagging me! I''ll do it when I do it')
 
 def setForcedTransitionMatrix():
     # TODO: implement
-    pass
+    raise NotImplementedError('Yeah, yeah, I know, lazy...')
 
 def setPriorsActionPairs(mdp,priorBeliefs = 'default'):
     ''' Sets the belief used by the subject regarding which action pairs are
@@ -162,7 +262,7 @@ def setPriorsActionPairs(mdp,priorBeliefs = 'default'):
 
 def runManyTrials(newActionPairs = False, apPriors = [],
                   newGoals = False, goalShape = [],
-                  rampSlope = 1, Gmean = [], Gscale = 100,
+                  rampX1 = 1, Gmean = [], Gscale = 100,
                   forceObs = True, nPerms = 10, sPerms = 10,
                   newGammaPriors = False,
                   newObsMatrix = False,
@@ -188,7 +288,7 @@ def runManyTrials(newActionPairs = False, apPriors = [],
             the reason for this method, it is the only one that defaults
             to true.
         2.- [outputs] = runManyTrials(newGoals = True, goalShape = 'ramp',
-                                        rampSlope = 2)
+                                        rampX1 = 2)
             This option changes the default 'flat' priors over last state
             (goals) into a ramp shape, with a 'slope' of 2. Without giving
             any values for forceObs, the defaults of yes will be used and
@@ -227,10 +327,10 @@ def runManyTrials(newActionPairs = False, apPriors = [],
                         setPriorGoals for details.
         goalShape       {'flat','ramp','unimodal'} Used in combination
                         with newGoals, sets the desired shape of the
-                        goals. 'ramp' has additional parameter rampSlope,
+                        goals. 'ramp' has additional parameter rampX1,
                         and 'unimodal' has additional parameters Gmean
                         and Gscale.
-        rampSlope       {x} Used in combination with newGoals = True and
+        rampX1       {x} Used in combination with newGoals = True and
                         goalShape = 'ramp', sets the slope (ish) of the
                         used ramp. See setPriorGoals for details.
         Gmean, Gscale   {x} Used in combination with newGoals=True and
@@ -280,7 +380,7 @@ def runManyTrials(newActionPairs = False, apPriors = [],
             raise Exception('BadInput: goalShape must be in {''flat'','+
                             ' ''ramp'','' unimodal''}' )
         # Warning: overwrites previous goals:
-        mdp.C = setPriorGoals(mdp, goalShape, rampSlope, Gmean, Gscale)
+        mdp.C = setPriorGoals(mdp, goalShape, rampX1, Gmean, Gscale)
 
     if forceObs == True:
         fstate, sucPerms, ranPerms = setForcedObservations(mdp,
