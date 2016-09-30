@@ -309,11 +309,16 @@ class Actinf(object):
         Smatrix = np.zeros((nS,nT))
         Smatrix[S[:-1], range(nT-1)] = 1
 
+        if hasattr(self, 'thres'):
+            thres = self.thres
+        else:
+            thres = S.max()
+
         maxy_plot = max(S.max(), self.thres)*1.2
 
         plt.figure()
         plt.plot(S,'+-')
-        plt.plot(range(nT), np.ones(nT)*self.thres)
+        plt.plot(range(nT), np.ones(nT)*thres)
         plt.ylim([0, maxy_plot])
         plt.ylabel('Accumulated points')
         plt.xlabel('Trial')

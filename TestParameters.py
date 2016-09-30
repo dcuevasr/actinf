@@ -85,14 +85,16 @@ def setPriorGoals(mdp,selectShape='flat', rampSlope = 1,
                                       range(mdp.nP)], (mdp.nS,mdp.nP)),
                                      dtype = int)
         goals[indices] = 1.0/indices.size
+
     elif selectShape == 'ramp':
-        stateRamp = np.arange(0,mdp.thres,rampSlope, dtype = float) + 1
-        istateR = np.arange(mdp.nS - mdp.thres, mdp.nS, dtype=int)
+        stateRamp = np.arange(0, mdp.thres*rampSlope, rampSlope, dtype = float) + 1
+        istateR = np.arange(mdp.thres, mdp.nS, dtype=int)
         for ix,vx in enumerate(istateR):
             indices = np.array(allothers([[vx],range(mdp.nP)],(mdp.nS,mdp.nP)))
             goals[indices] = stateRamp[ix]
         goals = goals/goals.sum()
 #        goals[range(mdp.nS-mdp.thres, mdp.nS)] = stateRamp
+
     elif selectShape == 'unimodal':
         from scipy.stats import norm
         if Gmean == 'change':
@@ -123,7 +125,7 @@ def setForcedTransitionMatrix():
     # TODO: implement
     pass
 
-def setPriorsActionPairs(mdp,priorBeliefs = 'default'):
+def setPriorsActionPairs(mdp,priorBeliefs = None):
     ''' Sets the belief used by the subject regarding which action pairs are
     more likely to be seen in the future. The change reflects in the third
     action available to the agent, which is the 'evolution' action. This action
@@ -151,7 +153,7 @@ def setPriorsActionPairs(mdp,priorBeliefs = 'default'):
         utils               Toolbox with some random tools like softmax.
     '''
     from utils import allothers
-    if priorBeliefs=='default':
+    if priorBeliefs is None:
         priorBeliefs = np.arange(mdp.nP)
     B = np.copy(mdp.B)
     for s in xrange(mdp.nS):
@@ -364,4 +366,66 @@ def runManyTrials(newActionPairs = False, apPriors = [],
 #            return 0
 
     return asta,abel,aact,aobs
+
+def posteriors_all_obs(newGoals = False, goalShape = [],
+                       rampSlope = 1, Gmean = [], Gscale = 100):
+    """ Generates the posteriors over actions for every possible observation
+    that the agent can get during the task of 'small', in betClass.
+
+    Output:
+        postActions         Dictionary whose keys are tuples
+                            (trial, state, action pair), representing the
+                            current trial number, the state observed (number
+                            of points) and the action pair observed. The
+                            elements corresponding to each tuple are the
+                            posterior distributions over actions.
+        postPrecision       Dictionary whose keys are tuples
+                            (trial, state, action pair), representing the
+                            current trial number, the state observed (number
+                            of points) and the action pair observed. The
+                            elements corresponding to each tuple are the
+                            posterior precision.
+    """
+
+    import betClass as bc
+
+
+
+    mabe = bc.betMDP(paradigm='small')
+    Ns = mabe.Ns # Number of hidden states (without actions)
+    nP = mabe.nP # Number of action pairs
+    nS = mabe.nS # Number of physical states = Ns/nP
+
+
+    if newGoals == True:
+        if goalShape not in ('flat','ramp','unimodal'):
+            raise Exception('BadInput: goalShape must be in {''flat'','+
+                            ' ''ramp'','' unimodal''}' )
+        # Warning: overwrites previous goals:
+        mabe.C = setPriorGoals(mabe, goalShape, rampSlope, Gmean, Gscale)
+
+
+    forcedStates, fTrials = mabe.all_points_and_trials()
+    postPrecision = {}
+    postActions = {}
+    for s, sta in enumerate(forcedStates):
+        for ap in range(nP):
+            cState = ap*nS + sta # Current hidden state
+            cStateVector = np.zeros(Ns) # for actinfClass
+            cStateVector[cState] = 1
+            obs = mabe.sampleNextObservation(cState) # Current observation
+            for tr in range(fTrials[s], mabe.nT):
+                dummybel, P, W = mabe.posteriorOverStates(obs, tr, mabe.V,
+                                        cStateVector, 1, mabe.gamma,
+                                        newB = None)
+                postActions[(tr, sta, ap)] = P
+                postPrecision[(tr, sta, ap)] = W
+    return postActions, postPrecision
+
+
+
+
+
+
+
 #%% Run stuff here
