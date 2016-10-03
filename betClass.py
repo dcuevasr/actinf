@@ -356,12 +356,12 @@ class betMDP(afc.Actinf):
         print tabulate(table_data, headers = table_headers)
 
 
-    def all_points_and_trials(self):
+    def all_points_and_trials(self, preserve_all = False):
         """ Wrapper to do all_points_and_trials_small/big, depending on the
         paradigm
         """
         if self.paradigm=='small':
-            points, trials_needed = self.all_points_and_trials_small()
+            points, trials_needed = self.all_points_and_trials_small(preserve_all)
             return points, trials_needed
         elif self.paradigm=='kolling compact':
             print 'Sorry, not yet implemented'
@@ -372,15 +372,14 @@ class betMDP(afc.Actinf):
             return None, None
 
 
-    def all_points_and_trials_small(self):
+    def all_points_and_trials_small(self, preserve_all = False):
         """ Calculates all the possible points attainable during this task, and
         all the possible number of trials in which the agent could have gotten
         each of these points.
 
         The 'runs' in which the points go over the threshold are eliminated, so
-        that the ouputs are not so big.
-
-        TODO: Implement a switch to keep all runs
+        that the ouputs are not so big. This can be toggled on and off with the
+        input preserve_all.
 
         Outputs:
             points              Array with all the possible number of points
@@ -395,19 +394,28 @@ class betMDP(afc.Actinf):
         rH = self.rH
         actPairs = np.unique(np.concatenate(([0],rL, rH)))
         numberActPairs = actPairs.size
-        # All possible combinations of 3 actions (lose, win high, win low):
+        # All possible combinations of all actions:
         Vb = np.array(list(itertools.product(range(numberActPairs),
                                              repeat = self.nT)))
 
         # Number of trials needed for a given number of points:
-        trialsNeeded = np.zeros(Vb.shape[0])
+        trialsNeeded = np.zeros(Vb.shape[0], dtype = int)
         # Calculate these points (save in V).
         for r, row in enumerate(Vb):
-            trialsNeeded[r] = np.sum(Vb[r,Vb[r,:]>0])
+            trialsNeeded[r] = self.nT - Vb[r,Vb[r,:]==0].size
         points = np.sum(Vb, axis=1) #Points gained
-        under_thres = points<self.thres
-        points = points[under_thres]
-        trialsNeeded = trialsNeeded[under_thres]
+
+        if preserve_all is False:
+            under_thres = points<self.thres
+            points = points[under_thres]
+            trialsNeeded = trialsNeeded[under_thres]
+        else:
+            #Eliminate those past nS
+            under_nS = points<self.nS
+            points = points[under_nS]
+            trialsNeeded = trialsNeeded[under_nS]
+#        return points, trialsNeeded
+
 
         uniquePoints = np.unique(points)
         uniqueTrials = np.zeros(uniquePoints.shape, dtype = np.int64)

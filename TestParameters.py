@@ -466,7 +466,7 @@ def runManyTrials(newActionPairs = False, apPriors = [],
     return asta,abel,aact,aobs
 
 def posteriors_all_obs(newGoals = False, goalShape = [],
-                       rampSlope = 1, Gmean = [], Gscale = 100):
+                       rampX1 = 1, Gmean = [], Gscale = 100):
     """ Generates the posteriors over actions for every possible observation
     that the agent can get during the task of 'small', in betClass.
 
@@ -486,6 +486,7 @@ def posteriors_all_obs(newGoals = False, goalShape = [],
     """
 
     import betClass as bc
+    import tqdm
 
 
 
@@ -500,13 +501,13 @@ def posteriors_all_obs(newGoals = False, goalShape = [],
             raise Exception('BadInput: goalShape must be in {''flat'','+
                             ' ''ramp'','' unimodal''}' )
         # Warning: overwrites previous goals:
-        mabe.C = setPriorGoals(mabe, goalShape, rampSlope, Gmean, Gscale)
+        mabe.C = setPriorGoals(mabe, goalShape, rampX1, Gmean, Gscale)
 
 
-    forcedStates, fTrials = mabe.all_points_and_trials()
+    forcedStates, fTrials = mabe.all_points_and_trials(preserve_all = True)
     postPrecision = {}
     postActions = {}
-    for s, sta in enumerate(forcedStates):
+    for s, sta in enumerate(tqdm.tqdm(forcedStates)):
         for ap in range(nP):
             cState = ap*nS + sta # Current hidden state
             cStateVector = np.zeros(Ns) # for actinfClass
@@ -518,7 +519,7 @@ def posteriors_all_obs(newGoals = False, goalShape = [],
                                         newB = None)
                 postActions[(tr, sta, ap)] = P
                 postPrecision[(tr, sta, ap)] = W
-    return postActions, postPrecision
+    return postActions, postPrecision, mabe
 
 
 
@@ -527,3 +528,42 @@ def posteriors_all_obs(newGoals = False, goalShape = [],
 
 
 #%% Run stuff here
+def compare_goal_shapes():
+    """ Script to compare the effects of the three goal shapes (flat, ramp and
+    unimodal) on the posteriors over actions and precision.
+
+    The comparison of precisions is a funny thing to do, as precision is
+    something that evolves as the mini-block progresses (not so with posteriors
+    over actions). For every forced observation, the same prior on precision is
+    used, and as such, only the change in precision should be compared.
+    """
+    import betClass as bc
+    import TestParameters as tp
+
+    mabes = bc.betMDP('small')
+
+    outDict = {}
+    # flat
+    postActFlat, postPreFlat, mabeFlat = tp.posteriors_all_obs(newGoals = True,
+                                            goalShape = 'flat')
+    outDict['flat'] = {'postAct':postActFlat, 'postPre':postPreFlat,
+                       'mdp':mabeFlat}
+    # ramp up
+    postActRup, postPreRup, mabeRup = tp.posteriors_all_obs(newGoals = True,
+                                            goalShape = 'ramp', rampX1 = 0.001)
+    outDict['rampup'] = {'postAct':postActRup, 'postPre':postPreRup,
+                       'mdp':mabeRup}
+    # ramp down
+    postActRdo, postPreRdo, mabeRdo = tp.posteriors_all_obs(newGoals = True,
+                                            goalShape = 'ramp', rampX1 = 0.2)
+    outDict['rampdown'] = {'postAct':postActRdo, 'postPre':postPreRdo,
+                       'mdp':mabeRdo}
+    # unimodal
+    postActUni, postPreUni, mabeUni = tp.posteriors_all_obs(newGoals = True,
+                                            goalShape = 'unimodal',
+                                            Gmean = mabes.thres+1,
+                                            Gscale = 2)
+    outDict['unimodal'] = {'postAct':postActUni, 'postPre':postPreUni,
+                       'mdp':mabeUni}
+
+    return outDict
