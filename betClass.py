@@ -75,63 +75,6 @@ class betMDP(afc.Actinf):
         else:
             self.setMDP(actionPairs)
 
-    def priors_over_goals(self, threshold = None, just_return = False):
-        import utils
-        import numpy as np
-
-        if threshold is None:
-            thres = self.thres
-        else:
-            thres = threshold
-
-        C = np.zeros(self.nS*self.nP)
-        allothers = np.array(utils.allothers([range(thres,self.nS),
-                                              range(self.nP)],
-                                              (self.nS,self.nP)))
-        C[allothers] = 1
-        C = C/sum(C)
-
-        if just_return is False:
-            self.C = C
-            self.thres = thres
-        elif just_return is True:
-            return C
-
-    def setActionPairs(self, number_aps = None):
-        """ Sets the action pairs to be used for this instance. Which ones are
-        selected depends on the instance's parameters.
-
-        There is probably no use of this from the outside. Might be good to
-        make it internal.
-        """
-        if self.paradigm == 'small':
-            nP = 3;
-            pL = np.array([0.9, 0.6, 0.8])
-            pH = np.array([0.3, 0.3, 0.2])
-            rL = np.array([1, 2, 1])
-            rH = np.array([3, 4, 4])
-        elif self.paradigm == 'kolling':
-            nP = 8
-            pL = np.array([90, 60, 75, 55, 90, 60, 75, 80], dtype=float)/100
-            pH = np.array([35, 35, 35, 20, 45, 45 ,40, 30], dtype=float)/100
-            rL = np.array([100, 180, 145, 145, 115, 150, 170, 120],
-                          dtype = int)/self.pdivide
-            rH = np.array([265 ,260 ,245 ,350, 240, 190, 245, 210],
-                          dtype = int)/self.pdivide
-        # The following is for testing purposes. Can be eliminated now:
-        if number_aps is not None:
-            nP = number_aps
-            pL = pL[:nP]
-            pH = pH[:nP]
-            rL = rL[:nP]
-            rH = rH[:nP]
-        # END testing crap
-
-        self.nP = nP
-        self.pL = pL
-        self.pH = pH
-        self.rL = rL
-        self.rH = rH
 
     def setMDP(self,parameters = None):
         """ Sets the observation and transition matrices, as well as the goals,
@@ -263,24 +206,10 @@ class betMDP(afc.Actinf):
         # Transition matrices
         # num2coords = np.unravel_index
         # coords2num = np.ravel_multi_index
-        B = np.zeros((nU,nS*nP,nS*nP))
-        for s in xrange(nS):
-            for p in xrange(nP):
-                nextsL = np.min((s+rL[p],nS-1)).astype(int)
-                nextsH = np.min((s+rH[p],nS-1)).astype(int)
-                mixL = utils.allothers([[nextsL],range(nP)],(nS,nP))
-                mixH = utils.allothers([[nextsH],range(nP)],(nS,nP))
-                this = utils.allothers([[s]     ,range(nP)],(nS,nP))
-                ifrom = [np.ravel_multi_index([s,p],(nS,nP),order='F')]
-                B[np.ix_([0], mixL, ifrom)] = pL[p]/nP
-                B[np.ix_([0], this, ifrom)] = (1 - pL[p])/nP
-                B[np.ix_([1], mixH, ifrom)] = pH[p]/nP
-                B[np.ix_([1], this, ifrom)] = (1 - pH[p])/nP
-
-
+        self.set_transition_matrices()
 
         # Define priors over last state (goal)
-        self.priors_over_goals()
+        self.set_prior_goals()
         # Priors over initial state
         D = np.zeros(nS*nP)
         D[0] = 1
@@ -295,7 +224,7 @@ class betMDP(afc.Actinf):
 
         # Preparing inputs for MDP
         self.A = A
-        self.B = B
+#        self.B = B
 #        self.C = C
         self.D = D
         self.S = S
@@ -308,6 +237,261 @@ class betMDP(afc.Actinf):
         self.importMDP()
 
 #        self.H = np.zeros(self.H.shape)
+
+
+    def priors_over_goals(self, threshold = None, just_return = False):
+        """
+        xxx DEPRECATED in favor of set_prior_goals() xxx
+
+        Not deleted just in case...
+        TODO: Delete if you are brave
+        """
+        import utils
+        import numpy as np
+        print 'This function has been deprecated in favor of set_prior_goals.\n'
+
+        if threshold is None:
+            thres = self.thres
+        else:
+            thres = threshold
+
+        C = np.zeros(self.nS*self.nP)
+        allothers = np.array(utils.allothers([range(thres,self.nS),
+                                              range(self.nP)],
+                                              (self.nS,self.nP)))
+        C[allothers] = 1
+        C = C/sum(C)
+
+        if just_return is False:
+            self.C = C
+            self.thres = thres
+        elif just_return is True:
+            return C
+
+    def setActionPairs(self, number_aps = None):
+        """ Sets the action pairs to be used for this instance. Which ones are
+        selected depends on the instance's parameters.
+
+        There is probably no use of this from the outside. Might be good to
+        make it internal.
+        """
+        if self.paradigm == 'small':
+            nP = 3;
+            pL = np.array([0.9, 0.6, 0.8])
+            pH = np.array([0.3, 0.3, 0.2])
+            rL = np.array([1, 2, 1])
+            rH = np.array([3, 4, 4])
+        elif self.paradigm == 'kolling':
+            nP = 8
+            pL = np.array([90, 60, 75, 55, 90, 60, 75, 80], dtype=float)/100
+            pH = np.array([35, 35, 35, 20, 45, 45 ,40, 30], dtype=float)/100
+            rL = np.array([100, 180, 145, 145, 115, 150, 170, 120],
+                          dtype = int)/self.pdivide
+            rH = np.array([265 ,260 ,245 ,350, 240, 190, 245, 210],
+                          dtype = int)/self.pdivide
+
+        self.nP = nP
+        self.pL = pL
+        self.pH = pH
+        self.rL = rL
+        self.rH = rH
+
+    def set_transition_matrices(self, priorActPairs = None):
+        """ Defines the transition matrices (actions) for the task, using
+        the input priorActPairs as priors over the probability of transitioning
+        to a new action pair.
+
+        The input priorActPairs must be a vector of size nP, normalized, whose
+        elements represent the biases towards each of the action pairs.
+        """
+
+        nU, nS, nP = self.nU, self.nS, self.nP
+        pL, pH, rL, rH = self.pL, self.pH, self.rL, self.rH
+
+        if priorActPairs is None:
+            pAP = np.ones(nP)/nP
+        else:
+            pAP = priorActPairs
+
+        B = np.zeros((nU,nS*nP,nS*nP))
+        for s in xrange(nS):
+            for p in xrange(nP):
+                nextsL = np.min((s+rL[p],nS-1)).astype(int)
+                nextsH = np.min((s+rH[p],nS-1)).astype(int)
+                mixL = utils.allothers([[nextsL],range(nP)],(nS,nP))
+                mixH = utils.allothers([[nextsH],range(nP)],(nS,nP))
+                this = utils.allothers([[s]     ,range(nP)],(nS,nP))
+                ifrom = [np.ravel_multi_index([s,p],(nS,nP),order='F')]
+                B[np.ix_([0], mixL, ifrom)] = (pL[p]*pAP).reshape(1,nP,1)
+                B[np.ix_([0], this, ifrom)] = ((1 - pL[p])*pAP).reshape(1,nP,1)
+                B[np.ix_([1], mixH, ifrom)] = (pH[p]*pAP).reshape(1,nP,1)
+                B[np.ix_([1], this, ifrom)] = ((1 - pH[p])*pAP).reshape(1,nP,1)
+        self.B = B
+
+    def set_prior_goals(self, selectShape='flat', rampX1 = None,
+                  Gmean = None, Gscale = None,
+                  convolute = True, just_return = False):
+        """ Wrapper for the functions prior_goals_flat/Ramp/Unimodal.
+
+        Sets priors over last state (goals) in different shapes for testing
+        the effects on the agent's behavior.
+
+        The three options are 'flat', which is what is normally set in cbet.py,
+        'ramp', which is a ramping-up that starts at threshold, and 'unimodal',
+        which uses a Gaussian to set up a 'hump' after threshold.
+
+        Uses:
+            goals = setPriorGoals(mdp [,selectShape] [, rampX1] [, Gmean]
+                                  [, Gscale] [,convolute] [,just_return])
+
+        Inputs:
+        selectShape         {'flat','ramp','unimodal'} selects which shape is
+                            to be used. When selecting 'ramp', the optional
+                            input rampX1 can be selected (default 1). When
+                            using 'unimodal', Gmean and Gscale can be set to
+                            change the mean (in Trial number) and scale of the
+                            Gaussian. Selecting a Gmean pre-threshold will
+                            cause the 'hump' to be invisible and the priors
+                            will be an exponential ramp down.
+        rampX1              {x} determines the initial point for the ramp,
+                            which uniquely determines the slope of the ramp.
+        Gmean, Gscale       {x}{y} determine the mean and the scale of the
+                            Gaussian for the unimodal version.
+        Outputs:
+        (Note: when just_return is False, nothing is returned)
+        goals               [nS] are the resulting priors over last state.
+        """
+        if selectShape == 'flat':
+            goals = self.prior_goals_flat(convolute, just_return = True)
+        elif selectShape == 'ramp':
+            if rampX1 is None:
+                raise ValueError('A value for rampX1 must be provided when using'+
+                                ' ''ramp''')
+            goals = self.prior_goals_ramp(rampX1 = rampX1,
+                                   convolute = convolute, just_return = True)
+        elif selectShape == 'unimodal':
+            if Gscale is None or Gmean is None:
+                raise ValueError('Values for Gmean and Gscale must be provided '+
+                                 'when using ''unimodal''')
+            goals = self.prior_goals_unimodal(Gmean, Gscale,
+                                    convolute = convolute,
+                                    just_return = True)
+        else:
+            raise ValueError('selectShape can only be ''flat'', ''ramp'' or '+
+                            '''unimodal''')
+        if just_return is True:
+            return goals
+        elif just_return is False and convolute is True:
+            self.C = goals
+        else:
+            raise ValueError('Bad combination of just_return and convolute')
+
+
+    def prior_goals_flat(self, convolute = True, just_return = True):
+        from utils import allothers
+
+        if convolute is True:
+            goals = np.zeros(self.nS*self.nP, dtype = float)
+
+            indices = np.array(allothers([range(self.thres,self.nS),
+                                      range(self.nP)], (self.nS,self.nP)),
+                                     dtype = int)
+            goals[indices] = 1.0/indices.size
+        elif convolute is False:
+            goals = np.zeros(self.nS, dtype = float)
+            goals[self.thres:] = 1.0/goals[self.thres:].size
+
+        if just_return is True:
+            return goals
+        if just_return is False and convolute is True:
+            self.C = goals
+        else:
+            raise ValueError('Bad combination of just_return and convolute')
+
+
+    def prior_goals_ramp(self, rampX1, convolute = True, just_return = True):
+        """ Creates goals as an increasing or decreasing ramp, depending on the
+        value given for rampX1.
+
+        rampX1 is the initial value. That is, the value of the first point
+        after threshold. If rampX1 is smaller than M (where M is the number of
+        points past-threshold), then the ramp is increasing. The slope is
+        calculated automatically (since rampX1 determines it uniquely).
+        """
+        from utils import allothers
+
+
+        thres = self.thres
+        nS = self.nS
+        pastThres = nS - thres
+        nP = self.nP
+
+        minX1 = 0
+        maxX1 = 2.0/pastThres
+
+        if rampX1<minX1 or rampX1>maxX1:
+            raise ValueError ('Initial point X1 is outside of allowable '+
+                              'limits for this task. min = %f, max = %f'
+                              % (minX1, maxX1))
+        if rampX1 == 1.0/pastThres:
+            raise ValueError('rampX1 is invalid. For this value, use ''flat'''+
+                                ' instead')
+
+        slope = (2.0/pastThres - 2.0*rampX1)/(pastThres-1)
+
+        stateRamp = rampX1 + slope*np.arange(pastThres)
+
+        istateR = np.arange(self.thres, self.nS)
+
+        if convolute is False:
+            goals = np.zeros(nS)
+            goals[thres:] = stateRamp
+        else:
+            goals = np.zeros(nS*nP)
+            for ix,vx in enumerate(istateR):
+                indices = np.array(allothers([[vx],range(self.nP)],
+                                              (self.nS,self.nP)))
+                goals[indices] = stateRamp[ix]
+            goals = goals/goals.sum()
+        if just_return is True:
+            return goals
+        elif just_return is False and convolute is True:
+            self.C = goals
+        else:
+            raise ValueError('Bad combination of just_return and convolute')
+
+
+
+    def prior_goals_unimodal(self, Gmean, Gscale,
+                           convolute = True, just_return = True):
+        """ Sets the priors over last state (goals) to a Gaussian distribution,
+        defined by Gmean and Gscale.
+        """
+        from utils import allothers
+        from scipy.stats import norm
+
+        points = np.arange(self.nS)
+        npoints = norm.pdf(points, Gmean, Gscale)
+        npoints[:self.thres] = 0
+        if convolute is False:
+            goals = npoints
+        else:
+            goals = np.zeros(self.Ns)
+            istateR = np.arange(self.thres, self.nS, dtype=int)
+            for ix,vx in enumerate(istateR):
+                indices = np.array(allothers([[vx],range(self.nP)],
+                                              (self.nS,self.nP)))
+                goals[indices] = npoints[vx]
+            goals = goals/goals.sum()
+
+        if just_return is True:
+            return goals
+        elif just_return is False and convolute is True:
+            self.C = goals
+        else:
+            raise ValueError('Bad combination of just_return and convolute')
+
+
 
     def print_table_results(self, results = None):
         """ Prints a table using the results from the Example from actinfClass.
@@ -348,7 +532,8 @@ class betMDP(afc.Actinf):
         table_data = []
         for t in xrange(self.nT):
             table_data.append([trial_number[t], real_state[t], action_pair[t],
-                               actions[t], expL[action_pair[t]], expH[action_pair[t]],
+                               actions[t], expL[action_pair[t]],
+                               expH[action_pair[t]],
                                post_actions[t][0], post_actions[t][1]])
 
         table_headers = ['Trial','State','Act Pair', 'Action', 'expL', 'expH',
@@ -361,7 +546,8 @@ class betMDP(afc.Actinf):
         paradigm
         """
         if self.paradigm=='small':
-            points, trials_needed = self.all_points_and_trials_small(preserve_all)
+            points, trials_needed = self.all_points_and_trials_small(
+                                                                preserve_all)
             return points, trials_needed
         elif self.paradigm=='kolling compact':
             print 'Sorry, not yet implemented'

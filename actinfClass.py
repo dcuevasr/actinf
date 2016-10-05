@@ -56,7 +56,7 @@ class Actinf(object):
 
         Setting SmallestProbability to False adds nothing to the matrices but
         still defines the logarithms and H. H is a matrix of zeros in this
-        case.
+        case, since lim(x->0)xlogx = 0.
         """
         # TODO: Fix these parameters properly.
 #        self.alpha = 8.0
@@ -107,7 +107,7 @@ class Actinf(object):
         Decision model for Active Inference. Takes as input the model parameters
         in MDP, as well as an observation and the prior over the current state.
         """
-        import math
+#        print PriorPrecision, self.gamma
         V = Policies
         cNp = np.shape(V)[0]
         w = np.array(range(cNp))
@@ -159,8 +159,6 @@ class Actinf(object):
             b = self.lambd*b + (1 - self.lambd)*(self.beta -
                 sp.dot(u[w],Q))
             W = self.alpha/b
-            if math.isnan(W):
-                raise Exception('stoooop')
         # Calculate the posterior over policies and over actions.
         for j in xrange(self.Nu):
             P[j] = np.sum(u[w[utils.ismember(V[:,t],j)]])

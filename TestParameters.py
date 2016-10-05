@@ -5,6 +5,8 @@ Created on Wed Jul 20 12:33:11 2016
 @author: dario
 """
 import numpy as np
+import warnings
+import utils
 def setForcedObservations(mdp, nPerms=10, sPerms = 10):
     """
     Of all the possible permutations of the action pairs shown, the choices
@@ -49,6 +51,7 @@ def setForcedObservations(mdp, nPerms=10, sPerms = 10):
                                 +mdp.rH[ranPerms[per,tr-1]]*(V[v,tr-1]==1))
                                 *(sucPerms[ac,tr-1]==1))
     return state, sucPerms, ranPerms
+
 def setPriorGoals(mdp,selectShape='flat', rampX1 = None,
                   Gmean = None, Gscale = None,
                   convolute = True, just_return = True):
@@ -82,6 +85,7 @@ def setPriorGoals(mdp,selectShape='flat', rampX1 = None,
         (Note: when just_return is False, nothing is returned)
         goals               [nS] are the resulting priors over last state.
     """
+    print 'Deprecated. Use the betClass method set_prior_goals instead\n'
     if selectShape == 'flat':
         goals = priorGoalsFlat(mdp, convolute, just_return = True)
     elif selectShape == 'ramp':
@@ -108,6 +112,8 @@ def setPriorGoals(mdp,selectShape='flat', rampX1 = None,
 
 
 def priorGoalsFlat(mdp, convolute = True, just_return = True):
+    print 'Deprecated. Use the betClass method set_prior_goals instead\n'
+
     from utils import allothers
 
     if convolute is True:
@@ -137,7 +143,12 @@ def priorGoalsRamp(mdp, rampX1, convolute = True, just_return = True):
     after threshold. If rampX1 is smaller than M (where M is the number of
     points past-threshold), then the ramp is increasing. The slope is
     calculated automatically (since rampX1 determines it uniquely).
+
+    XXX DEPRECATED XXX
+    Use betClass.betMDP.set_prior_goals() instead.
     """
+    print 'Deprecated. Use the betClass method set_prior_goals instead\n'
+
     from utils import allothers
 
 
@@ -186,6 +197,8 @@ def priorGoalsUnimodal(mdp, Gmean, Gscale,
     """ Sets the priors over last state (goals) to a Gaussian distribution,
     defined by Gmean and Gscale.
     """
+    print 'Deprecated. Use the betClass method set_prior_goals instead\n'
+
     from utils import allothers
     from scipy.stats import norm
 
@@ -249,7 +262,15 @@ def setPriorsActionPairs(mdp,priorBeliefs = None):
                             unchanged here.
     Imported modules:
         utils               Toolbox with some random tools like softmax.
+
+
+    XXX DEPRECATED XXX
+    This functionality is already included in betClass. Use
+    betClass.betMDP.set_prior_goals(bias) instead.
     '''
+
+    print 'Deprecated. Use the betClass method set_transition_matrices instead\n'
+
     from utils import allothers
     if priorBeliefs is None:
         priorBeliefs = np.arange(mdp.nP)
@@ -356,8 +377,6 @@ def runManyTrials(newActionPairs = False, apPriors = [],
 
     """
     import betClass
-#    import actinfClass as af
-    # for testing purposes:
     import sys
     import tqdm
 
@@ -465,7 +484,7 @@ def runManyTrials(newActionPairs = False, apPriors = [],
 
     return asta,abel,aact,aobs
 
-def posteriors_all_obs(newGoals = False, goalShape = [],
+def posteriors_all_obs(mabe = None, newGoals = False, goalShape = [],
                        rampX1 = 1, Gmean = [], Gscale = 100):
     """ Generates the posteriors over actions for every possible observation
     that the agent can get during the task of 'small', in betClass.
@@ -488,13 +507,11 @@ def posteriors_all_obs(newGoals = False, goalShape = [],
     import betClass as bc
     import tqdm
 
-
-
-    mabe = bc.betMDP(paradigm='small')
+    if mabe is None:
+        mabe = bc.betMDP(paradigm='small')
     Ns = mabe.Ns # Number of hidden states (without actions)
     nP = mabe.nP # Number of action pairs
     nS = mabe.nS # Number of physical states = Ns/nP
-
 
     if newGoals == True:
         if goalShape not in ('flat','ramp','unimodal'):
@@ -502,7 +519,7 @@ def posteriors_all_obs(newGoals = False, goalShape = [],
                             ' ''ramp'','' unimodal''}' )
         # Warning: overwrites previous goals:
         mabe.C = setPriorGoals(mabe, goalShape, rampX1, Gmean, Gscale)
-
+        mabe.importMDP()
 
     forcedStates, fTrials = mabe.all_points_and_trials(preserve_all = True)
     postPrecision = {}
@@ -522,13 +539,8 @@ def posteriors_all_obs(newGoals = False, goalShape = [],
     return postActions, postPrecision, mabe
 
 
-
-
-
-
-
 #%% Run stuff here
-def compare_goal_shapes():
+def posteriors_goal_shapes():
     """ Script to compare the effects of the three goal shapes (flat, ramp and
     unimodal) on the posteriors over actions and precision.
 
@@ -567,3 +579,53 @@ def compare_goal_shapes():
                        'mdp':mabeUni}
 
     return outDict
+
+def posteriors_prior_precision(priorPrecision):
+    """ Script to compare the effects of different priors over precision on the
+    posteriors over actions and precision.
+
+    Input:
+    priorPrecision      [x] array with all the values of priors over precision
+                        to use.
+    """
+    import betClass as bc
+    import TestParameters as tp
+
+    mabes = bc.betMDP(paradigm = 'small')
+
+    outDict = {}
+    for gamma in priorPrecision:
+        mabes.gamma = gamma
+        postAct, postPre, mabeOut = tp.posteriors_all_obs(mabes)
+        outDict[gamma] = {'postAct':postAct, 'postPre':postPre, 'mdp':mabeOut}
+    return outDict
+
+
+def posteriors_prior_action_pairs(priorAP):
+    """ Script to compare the effects of different priors over action pairs on
+    the posteriors over actions and precision.
+
+    Input:
+    priorAP             [x,nP] 2D array with the priors to use. Each row is a
+                        set of priors, each column the prior over the
+                        corresponding action pair. The rows are normalized if
+                        required.
+    """
+    import betClass as bc
+
+    mabes = bc.betMDP('small')
+    nPriors, nAPs = priorAP.shape
+
+    if mabes.nP != nAPs:
+        raise ValueError('Input provided does not match number of APs in task')
+
+    outDict = {}
+    for ip in xrange(nPriors):
+        mabes.set_transition_matrices(priorAP[ip,:])
+        postAct, postPre, mabeOut = posteriors_all_obs(mabes)
+        outDict[tuple(priorAP[ip,:].tolist())] = {'postAct':postAct,
+                                         'postPre':postPre, 'mdp':mabeOut}
+    return outDict
+
+
+
