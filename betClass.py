@@ -296,7 +296,9 @@ class betMDP(afc.Actinf):
         self.rL = rL
         self.rH = rH
 
-    def set_transition_matrices(self, priorActPairs = None):
+    def set_transition_matrices(self, priorActPairs = None,
+                                reward = None, probability = None,
+                                just_return = False):
         """ Defines the transition matrices (actions) for the task, using
         the input priorActPairs as priors over the probability of transitioning
         to a new action pair.
@@ -304,9 +306,15 @@ class betMDP(afc.Actinf):
         The input priorActPairs must be a vector of size nP, normalized, whose
         elements represent the biases towards each of the action pairs.
         """
-
-        nU, nS, nP = self.nU, self.nS, self.nP
-        pL, pH, rL, rH = self.pL, self.pH, self.rL, self.rH
+        if reward is None:
+            nU, nS, nP = self.nU, self.nS, self.nP
+            pL, pH, rL, rH = self.pL, self.pH, self.rL, self.rH
+        else:
+            nU = 2
+            nS = self.nS
+            nP = 1
+            pL = pH = [probability]
+            rL = rH = [reward]
 
         if priorActPairs is None:
             pAP = np.ones(nP)/nP
@@ -326,7 +334,34 @@ class betMDP(afc.Actinf):
                 B[np.ix_([0], this, ifrom)] = ((1 - pL[p])*pAP).reshape(1,nP,1)
                 B[np.ix_([1], mixH, ifrom)] = (pH[p]*pAP).reshape(1,nP,1)
                 B[np.ix_([1], this, ifrom)] = ((1 - pH[p])*pAP).reshape(1,nP,1)
-        self.B = B
+        if just_return is False:
+            self.B = B
+        else:
+            return B
+
+    def set_single_trans_mat(self, reward, probability):
+        """ Creates a single transition matrix for the current task, given the
+        reward and probability given as input.
+
+        If the inputs are vectors (same length), a number of transition
+        matrices is created that equals the number of elements in the vectors.
+
+        Wrapper for set_transition_matrices
+        """
+
+        nB = len(reward)
+        nS = self.nS
+
+        B = np.zeros((nB, nS, nS))
+        for b in xrange(nB):
+            twoBs = self.set_transition_matrices(reward = reward[b],
+                                            probability = probability[b],
+                                            just_return = True)
+            B[b] = twoBs[0]
+
+
+        return B
+
 
     def set_prior_goals(self, selectShape='flat', rampX1 = None,
                   Gmean = None, Gscale = None,

@@ -627,5 +627,23 @@ def posteriors_prior_action_pairs(priorAP):
                                          'postPre':postPre, 'mdp':mabeOut}
     return outDict
 
+def kolling_compact_new():
+    """ Full run with the Kolling task, as implemented without the extra
+    dimension for action pairs.
+    """
+    import betClass as bc
+    import numpy as np
 
+    mabe = bc.betMDP('kolling compact')
+
+    # Get transition matrices for every action in mabe
+    newB = np.zeros((2, mabe.nP, mabe.nS, mabe.nS))
+    newB[0] = mabe.set_single_trans_mat(mabe.rL, mabe.pL)
+    newB[1] = mabe.set_single_trans_mat(mabe.rH, mabe.pH)
+
+    nT = mabe.nT
+    APs = np.arange(mabe.nP)
+    np.random.shuffle(APs)
+
+    for t in range(nT):
 
