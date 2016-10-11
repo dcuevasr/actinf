@@ -485,7 +485,8 @@ def runManyTrials(newActionPairs = False, apPriors = [],
     return asta,abel,aact,aobs
 
 def posteriors_all_obs(mabe = None, newGoals = False, goalShape = [],
-                       rampX1 = 1, Gmean = [], Gscale = 100):
+                       rampX1 = 1, Gmean = [], Gscale = 100,
+                       paradigm = 'small'):
     """ Generates the posteriors over actions for every possible observation
     that the agent can get during the task of 'small', in betClass.
 
@@ -508,7 +509,7 @@ def posteriors_all_obs(mabe = None, newGoals = False, goalShape = [],
     import tqdm
 
     if mabe is None:
-        mabe = bc.betMDP(paradigm='small')
+        mabe = bc.betMDP(paradigm=paradigm)
     Ns = mabe.Ns # Number of hidden states (without actions)
     nP = mabe.nP # Number of action pairs
     nS = mabe.nS # Number of physical states = Ns/nP
@@ -627,23 +628,49 @@ def posteriors_prior_action_pairs(priorAP):
                                          'postPre':postPre, 'mdp':mabeOut}
     return outDict
 
-def kolling_compact_new():
-    """ Full run with the Kolling task, as implemented without the extra
-    dimension for action pairs.
+#def kolling_compact_new():
+#    """ Full run with the Kolling task, as implemented without the extra
+#    dimension for action pairs.
+#    """
+#    import betClass as bc
+#    import numpy as np
+#
+#    mabe = bc.betMDP('kolling compact')
+#
+#    # Get transition matrices for every action in mabe
+#    newB = np.zeros((2, mabe.nP, mabe.nS, mabe.nS))
+#    newB[0] = mabe.set_single_trans_mat(mabe.rL, mabe.pL)
+#    newB[1] = mabe.set_single_trans_mat(mabe.rH, mabe.pH)
+#
+#    nT = mabe.nT
+#    APs = np.arange(mabe.nP)
+#    np.random.shuffle(APs)
+#
+#    for t in range(nT):
+#        pass
+
+
+def calculate_risk_pressure(postAct, thres, nT):
+    """ Calculates, for every entry in postAct, the risk pressure, as defined
+    in Kolling_2014.
     """
-    import betClass as bc
     import numpy as np
 
-    mabe = bc.betMDP('kolling compact')
+#    riskPressure = np.zeros(len(postAct.keys()), dtype = float)
+    rp_v_postR = np.zeros((len(postAct.keys()), 2))
+    for nr, (tr, pts, ap) in enumerate(postAct.keys()):
+        riskPressure = float((thres - pts))/(nT - tr)
+        rp_v_postR[nr, :] = np.array([riskPressure, postAct[(tr,pts,ap)][0]])
 
-    # Get transition matrices for every action in mabe
-    newB = np.zeros((2, mabe.nP, mabe.nS, mabe.nS))
-    newB[0] = mabe.set_single_trans_mat(mabe.rL, mabe.pL)
-    newB[1] = mabe.set_single_trans_mat(mabe.rH, mabe.pH)
+    return rp_v_postR
 
-    nT = mabe.nT
-    APs = np.arange(mabe.nP)
-    np.random.shuffle(APs)
+def plot_rp_vs_postact(rp_v_postR):
+    """ Plot posterior over Risky choice vs Risk pressure.
 
-    for t in range(nT):
+    Uses the output from calculate_risk_pressure()
+    """
+    from matplotlib import pyplot as plt
 
+    phandle = plt.plot(rp_v_postR[:,0], 1-rp_v_postR[:,1], '*')
+
+    return phandle

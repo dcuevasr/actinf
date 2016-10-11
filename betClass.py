@@ -52,11 +52,11 @@ class betMDP(afc.Actinf):
             self.thres = 1000
             self.nT = 8
         elif paradigm == 'kolling compact':
-            self.nS = 200
+            self.nS = 80
             self.paradigm = 'kolling'
             self.pdivide = 10
             self.nT = 8
-            self.thres = 100
+            self.thres = 60
         else:
             self.nS = 12
             self.thres = 6
@@ -577,19 +577,19 @@ class betMDP(afc.Actinf):
 
 
     def all_points_and_trials(self, preserve_all = False):
-        """ Wrapper to do all_points_and_trials_small/big, depending on the
+        """ Wrapper to do all_points_and_trials_small/kolling, depending on the
         paradigm
         """
         if self.paradigm=='small':
             points, trials_needed = self.all_points_and_trials_small(
                                                                 preserve_all)
             return points, trials_needed
-        elif self.paradigm=='kolling compact':
-            print 'Sorry, not yet implemented'
-            # TODO: Implement
-            return None, None
+        elif self.paradigm=='kolling':
+            points, trials_needed = self.all_points_and_trials_kolling(
+                                                                preserve_all)
+            return points, trials_needed
         else:
-            print 'Unknown paradigm'
+            raise ValueError('Unknown paradigm')
             return None, None
 
 
@@ -642,5 +642,55 @@ class betMDP(afc.Actinf):
         uniqueTrials = np.zeros(uniquePoints.shape, dtype = np.int64)
         for i, up in enumerate(uniquePoints):
             uniqueTrials[i] = min(trialsNeeded[points == up])
+
+        return uniquePoints, uniqueTrials
+
+    def all_points_and_trials_kolling(self, preserve_all = False):
+        """ Calculates all the possible points attainable during this task, and
+        all the possible number of trials in which the agent could have gotten
+        each of these points.
+
+        The 'runs' in which the points go over the threshold are eliminated, so
+        that the ouputs are not so big. This can be toggled on and off with the
+        input preserve_all.
+
+        Outputs:
+            points              Array with all the possible number of points
+                                that can be gained in this game.
+            trials_needed       Array that, for every element of 'points' (see
+                                above) has the minimum number of trials needed
+                                to attain them.
+        """
+        import numpy as np
+        import itertools
+
+        rL = self.rL
+        rH = self.rH
+        nP = self.nP
+
+        Vb = np.array(list(itertools.product(range(3), repeat=nP)))
+        V = np.zeros(Vb.shape)
+        points = np.zeros(Vb.shape[0], dtype = int)
+        trials = np.zeros(Vb.shape[0], dtype = int)
+        for r, row in enumerate(Vb):
+            for t, val in enumerate(row):
+                V[r, t] = (val == 1)*rL[t] + (val == 2)*rH[t]
+                points[r] = V[r,:].sum()
+                trials[r] = self.nT - Vb[r, Vb[r,:]==0].size
+
+        if preserve_all is False:
+            under_thres = points<self.thres
+            points = points[under_thres]
+            trials = trials[under_thres]
+        else:
+            #Eliminate those past nS
+            under_nS = points<self.nS
+            points = points[under_nS]
+            trials = trials[under_nS]
+
+        uniquePoints = np.unique(points)
+        uniqueTrials = np.zeros(uniquePoints.shape, dtype = int)
+        for i, up in enumerate(uniquePoints):
+            uniqueTrials[i] = min(trials[points == up])
 
         return uniquePoints, uniqueTrials
