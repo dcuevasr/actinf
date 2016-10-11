@@ -157,7 +157,7 @@ class Actinf(object):
             u[w] = utils.softmax(W*Q)
             # precision (W)
             b = self.lambd*b + (1 - self.lambd)*(self.beta -
-                sp.dot(u[w],Q))
+                sp.dot(u[w],Q)/cNp)
             W = self.alpha/b
         # Calculate the posterior over policies and over actions.
         for j in xrange(self.Nu):
