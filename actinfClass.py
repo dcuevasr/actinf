@@ -102,10 +102,15 @@ class Actinf(object):
 
     def posteriorOverStates(self, Observation, CurrentTime, Policies,
                             PosteriorLastState, PastAction,
-                            PriorPrecision, newB = None):
+                            PriorPrecision, newB = None, PreUpd = False):
         """
-        Decision model for Active Inference. Takes as input the model parameters
-        in MDP, as well as an observation and the prior over the current state.
+        Decision model for Active Inference. Takes as input the model
+        parameters in MDP, as well as an observation and the prior over the
+        current state.
+
+        The input PreUpd decides whether the output should be the final
+        value of precision (False) or the vector with all the updates for this
+        trial (True).
         """
 #        print PriorPrecision, self.gamma
         V = Policies
@@ -149,9 +154,10 @@ class Actinf(object):
 
 #        self.oQ.append(Q)
 #        self.oV.append(V)
-        # Variational updates: calculate the distribution over actions, then the
-        # precision, and iterate N times.
-        b = self.alpha/W # Recover b 'posterior' (or prior or whatever) from precision
+        # Variational updates: calculate the distribution over actions, then
+        # the precision, and iterate N times.
+        precisionUpdates = []
+        b = self.alpha/W
         for i in xrange(self.N):
             # policy (u)
             u[w] = utils.softmax(W*Q)
@@ -159,11 +165,15 @@ class Actinf(object):
             b = self.lambd*b + (1 - self.lambd)*(self.beta -
                 sp.dot(u[w],Q)/cNp)
             W = self.alpha/b
+            precisionUpdates.append(W)
         # Calculate the posterior over policies and over actions.
         for j in xrange(self.Nu):
             P[j] = np.sum(u[w[utils.ismember(V[:,t],j)]])
 
-        return x, P, W
+        if PreUpd is True:
+            return x, P, precisionUpdates
+        else:
+            return x, P, W
 
     def sampleNextState(self,CurrentState, PosteriorAction):
         """
@@ -187,7 +197,7 @@ class Actinf(object):
         Observation = np.nonzero(np.random.rand(1) <
                         np.cumsum(self.A[:,CurrentState]))[0][0]
         return Observation
-    def exampleFull(self, printTime = False):
+    def exampleFull(self, printTime = False, PreUpd = False):
         """ This is a use example for the Active Inference class. It performs
         inference for all trials in one go.
 
@@ -225,16 +235,22 @@ class Actinf(object):
         PosteriorLastState = self.D
         PastAction = 1
         PriorPrecision = self.gamma
+        Pupd = []
         for t in xrange(T-1):
             # Sample an observation from current state
             obs[t] = self.sampleNextObservation(sta[t])
             # Update beliefs over current state and posterior over actions
             # and precision
-            bel[t,:], P[t,:], W[t] = self.posteriorOverStates(obs[t], t, wV,
+            bel[t,:], P[t,:], Gamma = self.posteriorOverStates(obs[t], t, wV,
                                                     PosteriorLastState,
                                                     PastAction,
-                                                    PriorPrecision)
-
+                                                    PriorPrecision,
+                                                    PreUpd = PreUpd)
+            if PreUpd is True:
+                W[t] = Gamma[-1]
+                Pupd.append(Gamma)
+            else:
+                W[t] = Gamma
             # Sample an action and the next state using posteriors
             act[t], sta[t+1] = self.sampleNextState( sta[t], P[t,:])
             # Remove from pool all policies that don't have the selected action
@@ -251,13 +267,19 @@ class Actinf(object):
         self.Example = {'Obs':obs, 'RealStates':sta, 'InfStates':bel,
                         'Precision':W, 'PostActions':P, 'Actions':act,
                         'xt':xt}
+        if PreUpd is True:
+            self.Example['PrecisionUpdates'] = np.array(Pupd)
         if printTime is True:
             print 'Example finished in %f seconds' % xt
 
 #        print 'See the Example dictionary for the results\n'
 
     def plot_action_posteriors(self, posterior_over_actions = None):
-        """ Stacked bar plot of the posteriors over actions at each trial
+        """ Stacked bar plot of the posteriors over actions at each trial.
+
+        If the posteriors are provided in the input, those are plotted.
+        Otherwise, the function attempts to get them from the Example dict,
+        which is the output of the exampleFull() method.
         """
         import matplotlib.pyplot as plt
         if posterior_over_actions is not None:
@@ -278,13 +300,18 @@ class Actinf(object):
             bottoms += postA[:,act]
         plt.show()
 
-    def plot_real_states(self, real_states = None, which_real = None):
+    def plot_real_states(self, real_states = None,
+                         actions = None, which_real = None):
         """ Plots the real states visited by the agent.
 
         When a which_real parameter is provided, only the physical states are
         plotted, which are assumed to be the first dimension of an array (in
         fortran ordering). The value of which_real, when provided, is taken
         to be the number of physical states.
+
+        If the real states are provided (in the real_states input), those are
+        plotted. Otherwise, the function attempts to plot from the Example
+        dictionary, which is the output from exampleFull().
         """
         import matplotlib.pyplot as plt
         import numpy as np
@@ -293,6 +320,13 @@ class Actinf(object):
             S = real_states
         else:
             S = self.Example['RealStates']
+            A = self.Example['Actions']
+
+        if actions is not None:
+            A = actions
+        else:
+            A = np.zeros(self.nT)
+
 
         nS = self.Ns
         nT = S.size

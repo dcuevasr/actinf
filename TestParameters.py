@@ -516,7 +516,7 @@ def posteriors_all_obs(mabe = None, newGoals = False, goalShape = [],
 
     if newGoals == True:
         if goalShape not in ('flat','ramp','unimodal'):
-            raise Exception('BadInput: goalShape must be in {''flat'','+
+            raise ValueError('BadInput: goalShape must be in {''flat'','+
                             ' ''ramp'','' unimodal''}' )
         # Warning: overwrites previous goals:
         mabe.C = setPriorGoals(mabe, goalShape, rampX1, Gmean, Gscale)
