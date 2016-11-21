@@ -12,7 +12,7 @@ import theano as th
 import actinfThClass as afOp
 
 class actinf(Discrete):
-    def __init__(self, gammi, lnc, gamma_ini, lambd, alpha, beta, v, s, h,b,ct,
+    def __init__(self, gammi, lnc, lambd, alpha, beta, v, s, h,b,ct,
                  *args, **kwargs):
         super(actinf, self).__init__(*args, **kwargs)
         self.lnc = lnc
@@ -54,7 +54,7 @@ v2 = v[v[:,ct]==1]
 mabes.exampleFull()
 s = np.zeros(s.shape)
 s[mabes.Example['RealStates'][ct]] = 1
-Y = np.random.choice([0,1], 100, replace=True, p=mabes.Example['PostActions'][ct])
+Y = np.random.choice([0,1], 10, replace=True, p=mabes.Example['PostActions'][ct])
 
 #actinf.grad = lambda *x: x[0]
 actinf_model = Model()
@@ -62,6 +62,6 @@ actinf_model = Model()
 with actinf_model:
 
     gammi = HalfNormal('gammi', sd=10)
-    Y_obs = actinf('Y_obs', gammi, lnc, 5, lambd, alpha, beta,
+    Y_obs = actinf('Y_obs', gammi, lnc, lambd, alpha, beta,
                    v[:,ct:], s, h, b, ct, observed=Y)
-    map_estimate = find_MAP()
+    map_estimate = find_MAP(start={gammi:20})
