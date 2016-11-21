@@ -12,56 +12,47 @@ import theano as th
 
 B = T.tensor3('B')   # Transition matrices (nU, nS, nS)
 S = T.vector('S')   # Current state
-C = T.vector('C')   # Goals
-V = T.matrix('V')   # Collection of all policies (row is policy)
-Pi = T.vector('Pi', dtype='int8') # Policy to evaluate
-fS = T.vector('fS') # Free energy of a policy
-
+Pi = T.vector(name='Pi', dtype='int8') # Policy to evaluate
+xS = T.matrix('xS') # Final state of a policy ([t, nS])
+C = T.vector('C')   # Goals of actinf
+V = T.matrix('V', dtype='int8')   # All policies for actinf
+xS_all = T.tensor3('xS_all')  # All expected states for all policies
 nT = 8
-t = 4
+t = 0
 
 def next_state(action, S, B):
     return th.dot(B[action],S)
 
-# Loop to apply the actions of a policy in sequence.
-expected_states, upd_expected_states = th.scan(fn=next_state,
-                                                 sequences=Pi[t:],
-                                                 outputs_info=S,
-                                                 non_sequences=B)
-# Function to calculate the last expected state given a policy
-f_pred_final_state = th.function(inputs=[Pi,B,S], outputs=expected_states[-1])
 
+expected_states, update = th.scan(fn=next_state,
+                         sequences=Pi,
+                         outputs_info=S,
+                         non_sequences=B)
+f_pred_final_state = th.function(inputs=[Pi, S, B], outputs=expected_states)
 
+def free_energy(xS, C):
+    return T.sum(T.abs_(xS - C))
 
-def kl_diff(fS, C):
-    return T.sum(T.abs_(fS - C))
-
-# Loop to calculate the free energy of a policy.
-fE, updfE = th.scan(fn=kl_diff, 
-                    sequences=fS,
+fE_single, updfE_single = th.scan(fn=free_energy, 
+                    sequences=xS,
                     non_sequences=C)
-# Function to calculate the free energy of one policy
-free_energy_policy = th.function(inputs=[fS, C], outputs=fE)
+free_energy_policy= th.function(inputs=[xS, C], outputs=fE_single.prod())
 
+xS_all, update_xS_all = th.scan(fn=f_pred_final_state, 
+                                sequences=V,
+                                non_sequences=[S, B])
+#f_xS_all = th.function(inputs=[V, S, B], outputs=xS_all)
 
-fE_all, updfE_all = th.scan(fn=free_energy_policy, 
-                            sequences=V,
-                            non_sequences=C)
+#fS_all, upd_fS_all = th.scan(fn=free_energy_policy, 
+#                             sequences=[V, xS_all],
+#                             non_sequences=B)
+#f_fS_all = th.function(inputs=[V, xS_all, B], outputs=fS_all)
 
-#free_energy_all = th.function(inputs=[V, C], outputs=fE_all)
-
-
-#
 #mabes = bc.betMDP('small')
-#
 #b = mabes.B
-#s = mabes.S
 #c = mabes.C
 #v = mabes.V.astype('int8')
-#pi = mabes.V[0].astype('int8')
+#s = mabes.S
 #
-#
-#calc_final_state = f_pred_final_state(pi, b, s)
-#calc_free_energy = free_energy_policy(calc_final_state, c)
-
-#calc_fE_all = free_energy_all(v, c)
+#c_exp_states = f_pred_final_state(v[0], s, b)
+#c_fE_pol1 = free_energy_policy_seq(c_exp_states, c)
