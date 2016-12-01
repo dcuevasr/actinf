@@ -59,7 +59,7 @@ class betMDP(afc.Actinf):
             self.thres = 60
         else:
             self.nS = 12
-            self.thres = 6
+            self.thres = 5
             self.paradigm = 'small'
             self.nT = 8
 
