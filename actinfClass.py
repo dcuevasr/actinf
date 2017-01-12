@@ -81,7 +81,7 @@ class Actinf(object):
         self.A = sp.dot(self.A,np.diag(1/np.sum(self.A,0)))
 
         self.B += (np.min(self.B)==0)*p0
-        for b in xrange(np.shape(self.B)[0]):
+        for b in range(np.shape(self.B)[0]):
             self.B[b] = self.B[b]/np.sum(self.B[b],axis=0)
 
         self.C += (np.min(self.C)==0)*p0
@@ -143,22 +143,22 @@ class Actinf(object):
 
         Q = np.zeros(cNp)
 
-        for k in xrange(cNp):
+        for k in range(cNp):
             xt = x
-            for j in xrange(t,T):
+            for j in range(t,T):
                 # transition probability from current state
                 xt = sp.dot(B[V[k, j],:,:], xt)
                 ot = sp.dot(self.A, xt)
                 # Predicted Divergence
                 Q[k] += self.H.dot(xt) + (self.lnC - np.log(ot)).dot(ot)
 
-#        self.oQ.append(Q)
-#        self.oV.append(V)
+        self.oQ.append(Q)
+        self.oV.append(V)
         # Variational updates: calculate the distribution over actions, then
         # the precision, and iterate N times.
         precisionUpdates = []
         b = self.alpha/W
-        for i in xrange(self.N):
+        for i in range(self.N):
             # policy (u)
             u[w] = utils.softmax(W*Q)
             # precision (W)
@@ -167,7 +167,7 @@ class Actinf(object):
             W = self.alpha/b
             precisionUpdates.append(W)
         # Calculate the posterior over policies and over actions.
-        for j in xrange(self.Nu):
+        for j in range(self.Nu):
             P[j] = np.sum(u[w[utils.ismember(V[:,t],j)]])
 
         if PreUpd is True:
@@ -236,7 +236,7 @@ class Actinf(object):
         PastAction = 1
         PriorPrecision = self.gamma
         Pupd = []
-        for t in xrange(T-1):
+        for t in range(T-1):
             # Sample an observation from current state
             obs[t] = self.sampleNextObservation(sta[t])
             # Update beliefs over current state and posterior over actions
@@ -270,7 +270,8 @@ class Actinf(object):
         if PreUpd is True:
             self.Example['PrecisionUpdates'] = np.array(Pupd)
         if printTime is True:
-            print 'Example finished in %f seconds' % xt
+            pass
+#            print 'Example finished in %f seconds' % xt
 
 #        print 'See the Example dictionary for the results\n'
 
@@ -293,7 +294,7 @@ class Actinf(object):
         width = 0.5
         bottoms = np.zeros(nT)
         plt.figure(1)
-        for act in xrange(nU):
+        for act in range(nU):
             ccolor = (act%2)*'g' + ((act+1)%2)*'y'
             plt.bar(range(1,nT+1), postA[:,act], width, bottom = bottoms,
                     color = ccolor)
@@ -357,6 +358,41 @@ class Actinf(object):
 
         plt.show
 
+    def expected_states(self, V = None, S = None):
+        """ Returns all the states expected to be visited in the future given
+        a set of action sequences V and an initial state S. Both S and the
+        output are probability distributions over all possible states.
+        
+        The initial state S is not returned as part of the array.
+        Note: nV = number of action sequences. nT = number of trials. 
+        nS = number of possible states.
+        
+        Inputs:
+          V             {nV, nT} Set of action sequences to use. Defaults to 
+                        the one contained in self.
+          S             {nS} Initial state distribution. Defaults to self.
+          
+        Outputs
+          xS            {nV, nT, nS} Expected states in the future. Does not 
+                        include the initial state. 
+        """
+        if V is None:
+            V = self.V
+        B = self.B
+        if S is None:
+            S = self.S
+        nv, nt = V.shape
+        # Expected visited states:
+        xS = np.zeros((nv, nt+1, self.Ns))
+        xS[:,0,:] = S
+        for v in range(nv):
+            for t in range(0,nt):
+                xS[v, t+1, :] = np.dot(B[V[v,t],:,:], xS[v, t, :])
+
+        return xS[:, 1:, :]
+        
+        
+        
 class MDPmodel(Actinf):
     """ For compatibility with older implementations of tasks that might still
     want to call with the old name.
@@ -424,8 +460,8 @@ class CurrentState(object):
         nU = B.shape[0]
 
         Brel = np.zeros((nU, self.nSr, self.nSr))
-        for u in xrange(nU):
-            for rel in xrange(self.nSr):
+        for u in range(nU):
+            for rel in range(self.nSr):
                 rel_indices = utils.allothers([range(self.nSr),[0]],
                                               (self.nSr,self.nSr))
                 Brel[u,:,rel] = B[u, rel_indices, rel]

@@ -15,6 +15,7 @@ import pymc3 as pm
 import betClass as bc
 import numpy as np
 from scipy import optimize
+from time import time
 
 
 th.config.exception_verbosity = 'high'
@@ -46,7 +47,7 @@ v2 = v[v[:,ct]==1]
 
 
 #%% Alt-data
-nD = 2
+nD = 5
 nS = mabes.nS
 nT = mabes.nT
 data = np.zeros(nD*nT, dtype=np.float64)
@@ -86,10 +87,13 @@ with actinf_model:
     Y_obs = afOp.actinfDist('Y_obs', gammi, lnC, lambd, alpha, beta,
                    v, stateV, h, b, trial, observed=data)
 #%%
-start =  {'mu': 20, 'sd_log_':30}
-map_estimate = find_MAP(model=actinf_model, start = start)
+t_ini = time()
+start =  {'mu': 20, 'sd_log_':10}
+map_estimate = find_MAP(model=actinf_model, start = start, fmin=optimize.fmin_powell)
+t_end = time()
+t_elapsed = t_end - t_ini
 #%%
-#manuts = nuts.NUTS(state=map_estimate, model=actinf_model)
+#manuts = nuts.NUTS(state=start, model=actinf_model)
 #    starts = {'gammi_log_':10, 'lnC_interval_': mabes.lnC}
 #%%
 #trace = pm.sample(2000, manuts, model=actinf_model)

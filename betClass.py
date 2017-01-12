@@ -59,7 +59,7 @@ class betMDP(afc.Actinf):
             self.thres = 60
         else:
             self.nS = 12
-            self.thres = 6
+            self.thres = 5
             self.paradigm = 'small'
             self.nT = 8
 
@@ -248,7 +248,7 @@ class betMDP(afc.Actinf):
         """
         import utils
         import numpy as np
-        print 'This function has been deprecated in favor of set_prior_goals.\n'
+#        print 'This function has been deprecated in favor of set_prior_goals.\n'
 
         if threshold is None:
             thres = self.thres
@@ -322,8 +322,8 @@ class betMDP(afc.Actinf):
             pAP = priorActPairs
 
         B = np.zeros((nU,nS*nP,nS*nP))
-        for s in xrange(nS):
-            for p in xrange(nP):
+        for s in range(nS):
+            for p in range(nP):
                 nextsL = np.min((s+rL[p],nS-1)).astype(int)
                 nextsH = np.min((s+rH[p],nS-1)).astype(int)
                 mixL = utils.allothers([[nextsL],range(nP)],(nS,nP))
@@ -353,7 +353,7 @@ class betMDP(afc.Actinf):
         nS = self.nS
 
         B = np.zeros((nB, nS, nS))
-        for b in xrange(nB):
+        for b in range(nB):
             twoBs = self.set_transition_matrices(reward = reward[b],
                                             probability = probability[b],
                                             just_return = True)
@@ -565,7 +565,7 @@ class betMDP(afc.Actinf):
         post_actions = Results['PostActions']
 
         table_data = []
-        for t in xrange(self.nT):
+        for t in range(self.nT):
             table_data.append([trial_number[t], real_state[t], action_pair[t],
                                actions[t], expL[action_pair[t]],
                                expH[action_pair[t]],
@@ -573,7 +573,7 @@ class betMDP(afc.Actinf):
 
         table_headers = ['Trial','State','Act Pair', 'Action', 'expL', 'expH',
                          'ProbAct0', 'ProbAct1']
-        print tabulate(table_data, headers = table_headers)
+#        print tabulate(table_data, headers = table_headers)
 
 
     def all_points_and_trials(self, preserve_all = False):

@@ -8,7 +8,7 @@ Created on Tue Nov  1 14:56:06 2016
 
 import theano as th
 from theano import tensor as T
-import pred_last_state4 as postA
+import posterior_states_theano as postA
 import numpy as np
 from pymc3.distributions import Discrete
 
@@ -21,8 +21,8 @@ class actinfOpElewise(th.gof.Op):
     """
 
     __props__ = ()
-    itypes = [T.dvector]
-    otypes = [T.dvector]
+#    itypes = [T.dvector]
+#    otypes = [T.dvector]
     check_input = True
     def __init__(self, lnc, lambd, alpha, beta, v, s, h, b, ct, *args, **kwargs):
         super(actinfOpElewise, self).__init__(*args, **kwargs)
@@ -40,7 +40,11 @@ class actinfOpElewise(th.gof.Op):
         self._check_inputs()
 
 #        self._create_all_functions()
-
+    def make_node(self, x):
+        x = T.as_tensor_variable(x)
+        # Note: using x_.type() is dangerous, as it copies x's broadcasting
+        # behaviour
+        return th.Apply(self, [x], [x.type()])
 
 #    def _create_all_functions(self):
 #        self.funs = [self._create_function(n) for n in range(self.nCt)]
@@ -131,9 +135,9 @@ class actinfOpElewise(th.gof.Op):
     def _grad_single(self, ct, s, lnC2, GAMMI2):
         lnC = lnC2
         GAMMI = GAMMI2
-        v = T.as_tensor(self.v)[:,ct:]
-        v0 = v[v[:,0]==0, :]
-        v1 = v[v[:,0]==1, :]
+        v = self.v#T.as_tensor(self.v)[:,ct:]
+        v0 = T.as_tensor(v[v[:,0]==0, :])
+        v1 = T.as_tensor(v[v[:,0]==1, :])
 
         cnp = v.shape[0]
 
@@ -175,15 +179,14 @@ class actinfOpElewise(th.gof.Op):
 #        dfd1_tZ = Jac1_gammi*dCdf[1][0]+ Jac2_gammi*dCdf[1][1]
 
         # Derivative wrt first input (lnc)
-        Jac1_lnC = (T.exp(GAMMA[-1]*(out1 + out2 - 2.*maxout))/(norm_const**2)*
+        Jac1_lnC = (T.exp(GAMMA[-1]*(out1 + out2 - 2*maxout))/(norm_const**2)*
                   (-dGdlnC*(out1 - out2) - GAMMA[-1]*(dFE0dlnC - dFE1dlnC)))
         Jac2_lnC = -Jac1_lnC
-        self.GAMMA = GAMMA
-        self.out1 = out1
-        self.out2 = out2
-        self.norm_const = norm_const
+
         Jac1 = T.concatenate([T.stack(Jac1_gammi), Jac1_lnC])
         Jac2 = T.concatenate([T.stack(Jac2_gammi), Jac2_lnC])
+        self.debug = [Jac1_lnC, Jac2_lnC, Jac2_gammi, Jac1_gammi, dFE0dlnC,
+                      dFE1dlnC, dGdg, out1, out2, v0, v1, v, ct]
         return Jac1, Jac2
 
     def grad(self, inputs, dCdf):
@@ -196,10 +199,11 @@ class actinfOpElewise(th.gof.Op):
 #        for t in self.ct:
 #            out = self._grad_single(t, s)
 
-        Jac1 = T.reshape(jac1, newshape=(1,-1))
-        Jac2 = T.reshape(jac2, newshape=(1,-1))
-        self.Jac = [Jac1, Jac2] #TODO: delete
-        return Jac1*dCdf[0][0] + Jac2*dCdf[0][1],
+#        Jac1 = T.reshape(jac1, newshape=(1,-1))
+#        Jac2 = T.reshape(jac2, newshape=(1,-1))
+        Jac = T.concatenate([jac1, jac2], axis=0)
+#        return Jac1*dCdf[0][0] + Jac2*dCdf[0][1],
+        return Jac.T.dot(dCdf[0]),
 
 class actinfDist(Discrete):
     """ pymc3 distribution for the posteriors over actions in active inference.
