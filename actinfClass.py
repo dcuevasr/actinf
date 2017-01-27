@@ -152,8 +152,8 @@ class Actinf(object):
                 # Predicted Divergence
                 Q[k] += self.H.dot(xt) + (self.lnC - np.log(ot)).dot(ot)
 
-        self.oQ.append(Q)
-        self.oV.append(V)
+#        self.oQ.append(Q)
+#        self.oV.append(V)
         # Variational updates: calculate the distribution over actions, then
         # the precision, and iterate N times.
         precisionUpdates = []
@@ -163,7 +163,7 @@ class Actinf(object):
             u[w] = utils.softmax(W*Q)
             # precision (W)
             b = self.lambd*b + (1 - self.lambd)*(self.beta -
-                sp.dot(u[w],Q)/cNp)
+                sp.dot(u[w],Q))
             W = self.alpha/b
             precisionUpdates.append(W)
         # Calculate the posterior over policies and over actions.
@@ -362,19 +362,19 @@ class Actinf(object):
         """ Returns all the states expected to be visited in the future given
         a set of action sequences V and an initial state S. Both S and the
         output are probability distributions over all possible states.
-        
+
         The initial state S is not returned as part of the array.
-        Note: nV = number of action sequences. nT = number of trials. 
+        Note: nV = number of action sequences. nT = number of trials.
         nS = number of possible states.
-        
+
         Inputs:
-          V             {nV, nT} Set of action sequences to use. Defaults to 
+          V             {nV, nT} Set of action sequences to use. Defaults to
                         the one contained in self.
           S             {nS} Initial state distribution. Defaults to self.
-          
+
         Outputs
-          xS            {nV, nT, nS} Expected states in the future. Does not 
-                        include the initial state. 
+          xS            {nV, nT, nS} Expected states in the future. Does not
+                        include the initial state.
         """
         if V is None:
             V = self.V
@@ -390,9 +390,9 @@ class Actinf(object):
                 xS[v, t+1, :] = np.dot(B[V[v,t],:,:], xS[v, t, :])
 
         return xS[:, 1:, :]
-        
-        
-        
+
+
+
 class MDPmodel(Actinf):
     """ For compatibility with older implementations of tasks that might still
     want to call with the old name.

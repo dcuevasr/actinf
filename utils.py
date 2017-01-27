@@ -12,11 +12,11 @@ def ismember(A,B):
 
 def softmax(A):
 
-    if type(A) is not np.ndarray:
-        raise Exception('Only numpy.nparray are accepted')
-    else:
-        if np.prod(np.shape(A)) != np.shape(A)[0]:
-            raise Exception('Only vectors are accepted!')
+#    if type(A) is not np.ndarray:
+#        raise Exception('Only numpy.nparray are accepted')
+#    else:
+#        if np.prod(np.shape(A)) != np.shape(A)[0]:
+#            raise Exception('Only vectors are accepted!')
     maxA = A.max()
     A = A - maxA
     A = np.exp(A)
@@ -40,9 +40,9 @@ def allothers(Indices, Dimensions):
     if len(Dimensions)==2:
         Dimensions = Dimensions + (1,)
     Iout = []
-    for x in xrange(len(Indices[0])):
-        for y in xrange(len(Indices[1])):
-            for z in xrange(len(Indices[2])):
+    for x in range(len(Indices[0])):
+        for y in range(len(Indices[1])):
+            for z in range(len(Indices[2])):
                 Iout.append(np.ravel_multi_index([Indices[0][x],
                                                   Indices[1][y],
                                                   Indices[2][z]],

@@ -37,7 +37,7 @@ import utils
 import actinfClass as afc
 class betMDP(afc.Actinf):
     def __init__(self, paradigm = 'kolling compact', changePairs = True,
-                 actionPairs = None, number_aps = None):
+                 actionPairs = None, nS = None, nT = None, thres = None):
         """
         Initializes the instance with parameter values depending on the inputs.
         See the class's help for details on optional inputs.
@@ -46,27 +46,45 @@ class betMDP(afc.Actinf):
         set all the MDP matrices for Active Inference.
         """
         if paradigm == 'kolling':
-            self.nS = 2000 #max number of attainable points
             self.paradigm = 'kolling'
             self.pdivide = 1
-            self.thres = 1000
-            self.nT = 8
+            if nS is not None:
+                self.nS = nS
+            else:
+                self.nS = 2000 #max number of attainable points
+            if thres is not None:
+                self.thres = thres
+            else:
+                self.thres = 1000
         elif paradigm == 'kolling compact':
-            self.nS = 80
             self.paradigm = 'kolling'
             self.pdivide = 10
-            self.nT = 8
-            self.thres = 60
+            if nS is not None:
+                self.nS = nS
+            else:
+                self.nS = 200 #max number of attainable points
+            if thres is not None:
+                self.thres = thres
+            else:
+                self.thres = 60
         else:
-            self.nS = 12
-            self.thres = 5
+            if nS is not None:
+                self.nS = nS
+            else:
+                self.nS = 20 #max number of attainable points
+            if thres is not None:
+                self.thres = thres
+            else:
+                self.thres = 5
             self.paradigm = 'small'
+
+
+        if nT is not None:
+            self.nT = nT
+        else:
             self.nT = 8
 
         self.nU = 2
-        # Testing. Can be deleted now:
-        self.number_aps = number_aps
-        # END testing
 
         self.obsnoise = 0.001 #0.0001
 
@@ -166,10 +184,7 @@ class betMDP(afc.Actinf):
         for each trial during simulations. To do this, a third action is
         created, B[2], which is called the evolution action. When chosen, the
         action pair changes to a random one (the distribution is not
-        necessarily constant). All the policies are then injected with a forced
-        third action (B[2]) every other trial, thus doubling the number of
-        trials; however, since all policies have B[2] every other trial, this
-        action is always chosen and the agent can count on it.
+        necessarily constant).
 
         If the action pairs are not supplied, they are taken from the method
         setActionPairs(). Otherwise, they must be provided in a dict with
@@ -198,7 +213,7 @@ class betMDP(afc.Actinf):
         else:
             # Default action pairs
 
-            self.setActionPairs(self.number_aps)
+            self.setActionPairs()
             nP, pL, pH, rL, rH = self.nP, self.pL, self.pH, self.rL, self.rH
 
         # Define observation matrix
@@ -268,7 +283,7 @@ class betMDP(afc.Actinf):
         elif just_return is True:
             return C
 
-    def setActionPairs(self, number_aps = None):
+    def setActionPairs(self):
         """ Sets the action pairs to be used for this instance. Which ones are
         selected depends on the instance's parameters.
 
@@ -365,7 +380,7 @@ class betMDP(afc.Actinf):
 
     def set_prior_goals(self, selectShape='flat', rampX1 = None,
                   Gmean = None, Gscale = None,
-                  convolute = True, just_return = False):
+                  convolute = True, cutoff = True, just_return = False):
         """ Wrapper for the functions prior_goals_flat/Ramp/Unimodal.
 
         Sets priors over last state (goals) in different shapes for testing
@@ -410,7 +425,7 @@ class betMDP(afc.Actinf):
                                  'when using ''unimodal''')
             goals = self.prior_goals_unimodal(Gmean, Gscale,
                                     convolute = convolute,
-                                    just_return = True)
+                                    cutoff = cutoff, just_return = True)
         else:
             raise ValueError('selectShape can only be ''flat'', ''ramp'' or '+
                             '''unimodal''')
@@ -498,7 +513,7 @@ class betMDP(afc.Actinf):
 
 
     def prior_goals_unimodal(self, Gmean, Gscale,
-                           convolute = True, just_return = True):
+                           convolute = True, cutoff = True, just_return = True):
         """ Sets the priors over last state (goals) to a Gaussian distribution,
         defined by Gmean and Gscale.
         """
@@ -507,16 +522,18 @@ class betMDP(afc.Actinf):
 
         points = np.arange(self.nS)
         npoints = norm.pdf(points, Gmean, Gscale)
-        npoints[:self.thres] = 0
+        if cutoff is True:
+            npoints[:self.thres] = 0
         if convolute is False:
             goals = npoints
         else:
-            goals = np.zeros(self.Ns)
-            istateR = np.arange(self.thres, self.nS, dtype=int)
-            for ix,vx in enumerate(istateR):
-                indices = np.array(allothers([[vx],range(self.nP)],
-                                              (self.nS,self.nP)))
-                goals[indices] = npoints[vx]
+#            goals = np.zeros(self.Ns)
+#            istateR = np.arange(self.thres, self.nS, dtype=int)
+#            for ix,vx in enumerate(istateR):
+#                indices = np.array(allothers([[vx],range(self.nP)],
+#                                              (self.nS,self.nP)))
+#                goals[indices] = npoints[vx]
+            goals = np.tile(npoints, self.nP)
             goals = goals/goals.sum()
 
         if just_return is True:
