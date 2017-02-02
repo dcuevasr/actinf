@@ -5,7 +5,7 @@ Created on Wed Jan 11 12:46:59 2017
 
 @author: dario
 
-Script for sampling the entire parameter space for the Kolling task, in which
+Methods for sampling the entire parameter space for the Kolling task, in which
 the goals are the one free parameter, which itself is parametrized in terms of
 the sufficient statistics of a normal distribution.
 
@@ -19,6 +19,8 @@ import betClass as bc
 import numpy as np
 import pickle
 import atexit
+import multiprocessing as mp
+
 def _remove_above_thres(deci, trial, state, thres, multiplier = 1.2):
     """Removes any observation that goes above the cutoff. """
 
@@ -93,10 +95,11 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     write_file: bool
         Whether or not write everything to a file.
 
+
     Returns
     -------
-    likelihood_model: np.array([nMu, nSd]), dtype = float
-        Data likelihood for every model.
+    prob_data: np.array([nMu, nSd]), dtype = float
+        Posterior over models (assuming flat priors)
     post_act: np.array([nMu, nSd, nObs, 2]), dtype = float
         Posteriors over actions for every model and every trial in the data.
     deci, trial, state: each a np.array([nObs]), dtype = int
@@ -174,39 +177,31 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
                                                      +np.exp(-16))
 
     print('Took %d seconds.' % (time() - tini))
-    #%% Calculate data likelihood for all parameter values
 
-    posta_inferred = {}
     # Do an atexit call in case I interrupt the python execution with ctrl+c,
     # it will save the calculations so far into the file, as it would normally
     # do when exiting:
-    if flag_write_posta is True:
-        atexit.register(_save_posteriors, posta_inferred,
-                        trial, state, thres, mu_sigma)
+
 
     print('Calculating posteriors over actions for all observations...',
           end='', flush = True)
     tini = time()
-    for m, mu in enumerate(range(min_mean, max_mean)):
-        for sd, sigma in enumerate(range(min_sigma,max_sigma)):
-            for s in range(len(state)):
-#                mabed.thres = thres[s]
-                # If state>max_state, replace by max_state.
-#                obs[cstate] = 1
-                if (mu, sigma, state[s], trial[s], thres[s]) in as_seen:
-                    posta_inferred[(m, sd, s)] = as_seen[(mu, sigma, state[s], trial[s], thres[s])]
-                else:
-                    mabed[thres[s]].lnC = arr_lnc[(m, sd, s)]
-                    posta_inferred[(m, sd, s)] = mabed[thres[s]].posteriorOverStates(state[s],
-                               trial[s], mabed[thres[s]].V, mabed[thres[s]].D, 0, 15)
+    #%% Calculate data likelihood for all parameter values
+    posta_inferred = simulate_posteriors(min_mean, max_mean, min_sigma,
+                                         max_sigma, as_seen,
+                                         state, trial, thres,
+                                         arr_lnc, mabed, flag_write_posta, mu_sigma)
+
+
+
     print('Took: %d seconds.' % (time() - tini))
-#    if flag_write_posta is True:
-#        _save_posteriors(posta_inferred, trial, state, thres, mu_sigma)
-    #%% Calculate marginal p(y) = sum_\theta {p(y|\theta)}
+    atexit.unregister(_save_posteriors)
+    if flag_write_posta is True:
+        _save_posteriors(posta_inferred, trial, state, thres, mu_sigma)
 
     post_act = np.zeros((mu_size, sd_size,NuData, 2))
     for keys in posta_inferred.keys():
-        post_act[keys[0], keys[1], keys[2],:] = posta_inferred[keys][1]
+        post_act[keys[0], keys[1], keys[2],:] = posta_inferred[keys][0]
 
     #%%
     print('Calculating likelihoods...', end='', flush = True)
@@ -214,6 +209,9 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     likelihood_model = _calculate_likelihood(deci, post_act)
     print('Took: %d seconds.' % (time() - tini))
 
+    # Marginalize
+    marginal_data = likelihood_model.sum()
+    prob_data = likelihood_model/marginal_data
     #%% Writing data to files
     if write_file is True:
         explanation = ('1: likelihood for all models. 2: posteriors over actions for'+
@@ -231,8 +229,82 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     print('The whole thing took: %d seconds.' % (time() - t_ini))
     smiley = np.random.choice([':)', 'XD', ':P', '8D'])
     print('Finished. Have a nice day %s\n' % smiley)
-    return likelihood_model, post_act, deci, trial, state, mu_sigma
+    return prob_data, post_act, deci, trial, state, mu_sigma
 
+def simulate_posteriors(min_mean, max_mean, min_sigma, max_sigma, as_seen,
+                        state, trial, thres, arr_lnc, mabed, wflag, mu_sigma):
+    posta_inferred = {}
+    if wflag is True:
+        atexit.register(_save_posteriors, posta_inferred,
+                        trial, state, thres, mu_sigma)
+    for m, mu in enumerate(range(min_mean, max_mean)):
+        for sd, sigma in enumerate(range(min_sigma,max_sigma)):
+            for s in range(len(state)):
+#                mabed.thres = thres[s]
+                # If state>max_state, replace by max_state.
+#                obs[cstate] = 1
+                if (mu, sigma, state[s], trial[s], thres[s]) in as_seen:
+                    posta_inferred[(m, sd, s)] = as_seen[(mu, sigma, state[s], trial[s], thres[s])]
+                    assert posta_inferred[(m, sd, s)] != (), \
+                              'as_seen returned empty for mu = %d, '\
+                              'sd = %d and obs = %d, t = %d, thres = %d'\
+                              % (m, sd, state[s], trial[s], thres[s])
+                else:
+                    mabed[thres[s]].lnC = arr_lnc[(m, sd, s)]
+                    posta_inferred[(m, sd, s)] = mabed[thres[s]].posteriorOverStates(state[s],
+                               trial[s], mabed[thres[s]].V, mabed[thres[s]].D, 0, 15)[1:3]
+                    assert posta_inferred[(m, sd, s)] != (), \
+                              'posteriorOverStates returned empty for mu = %d, '\
+                              'sd = %d and obs = %d, t = %d, thres = %d'\
+                              % (m, sd, state[s], trial[s], thres[s])
+
+    return posta_inferred
+def call_mabe(le_input):
+    mabe = le_input[0]
+    ckey = le_input[1]
+    return [ckey, mabe.posteriorOverStates(*le_input[2])[1:3]]
+def simulate_posteriors_par(min_mean, max_mean, min_sigma, max_sigma, as_seen,
+                        state, trial, thres, arr_lnc, mabed, dummy1, dummy2):
+    class multipros(object):
+        """ Methods for using with pool.eval_async below."""
+        def __init__(self, posta):
+            self.posta = posta
+
+        def save_to_dict(self, le_input):
+            """ Saves the output from posteriorOverStates (here received as
+            input) into the dictionary self.posta.
+            """
+            self.posta[le_input[0]] = le_input[1]
+
+
+    posta_inferred = {}
+    mamu = multipros({})
+    to_do = set()
+    for m, mu in enumerate(range(min_mean, max_mean)):
+        for sd, sigma in enumerate(range(min_sigma,max_sigma)):
+            for s in range(len(state)):
+#                mabed.thres = thres[s]
+                # If state>max_state, replace by max_state.
+#                obs[cstate] = 1
+                if (mu, sigma, state[s], trial[s], thres[s]) in as_seen:
+                    posta_inferred[(m, sd, s)] = as_seen[(mu, sigma, state[s], trial[s], thres[s])]
+                else:
+                    to_do.add((m, sd, s, mu, sigma))
+    with mp.Pool(8) as pool:
+        res = []
+        for nums in to_do:
+            m, sd, s, mu, sigma = nums
+#            print(type(m), type(sd), type(s), type(thres), flush=True)
+            mabed[thres[s]].lnC = arr_lnc[(m, sd, s)]
+            le_input = [mabed[thres[s]], (m, sd, s), [state[s], trial[s], mabed[thres[s]].V,
+                        mabed[thres[s]].D, 0, 15]]
+            res.append(pool.apply_async(call_mabe, [le_input], callback = mamu.save_to_dict))
+#            posta_inferred[(m, sd, s)] = mabed[thres[s]].posteriorOverStates(state[s],
+#                       trial[s], mabed[thres[s]].V, mabed[thres[s]].D, 0, 15)[1:3]
+        for r in res:
+            r.get()
+    posta_inferred.update(mamu.posta)
+    return posta_inferred
 
 def simulate_data(num_games = 10, paradigm = None):
     """ Simulates data for the kolling experiment using active inference.
@@ -322,7 +394,7 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma):
     for m in range(nMu):
         for s in range(nSd):
             for st in range(nSt):
-                try:
+                try: #In case the function was called by atexit with partial data
                     data[(mu_sigma[m, s, 0], mu_sigma[m, s, 1],
                           state[st], trial[st], thres[st])] = post_act[(m,s,st)]
                 except KeyError:
@@ -330,7 +402,11 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma):
     with open(data_file, 'wb') as mafi:
         pickle.dump(data, mafi)
     print('Posteriors saved.')
-def _check_data():
+def _check_data(): # TODO: delete
+    """ No idea what that is and it's never used... Probably a test that is no
+    longer necessary.
+    """
+
     import pickle
     import numpy as np
     # read data from file
@@ -389,8 +465,8 @@ def main(data_type, mu_range, sd_range, subject = 0,
     Note 2:
     In case of return_results = False, nothing is returned.
 
-    likeli: np.array[nM]
-        Likelihood values for all models specified by mu_range and sd_range.
+    post_model: np.array[nM]
+        Posteriors for all models specified by mu_range and sd_range.
     posta: np.array[nMu, nSd, nObs, 2], dtype = float
         Posterior over actions for all the observations, all the models.
     deci: np.array[nObs], dtype = bool
@@ -424,20 +500,20 @@ def main(data_type, mu_range, sd_range, subject = 0,
         data_flat = imda.prune_trials(data_flat, trials)
     if isinstance(subject, int):
         subject = subject,
-    likeli = {}
+    post_model = {}
     posta = {}
     deci = {}
     trial = {}
     state = {}
     mu_sigma = {}
     for s in subject:
-        (likeli[s], posta[s], deci[s], trial[s], state[s], mu_sigma[s]) = (
-                                  infer_parameters(mu_range=(-15,5),
-                                  sd_range=(5,12), data=data_flat[s]))
+        (post_model[s], posta[s], deci[s], trial[s], state[s], mu_sigma[s]) = (
+                                  infer_parameters(mu_range = mu_range,
+                                  sd_range=sd_range, data=data_flat[s]))
     if return_results is True:
-        return likeli, posta, deci, trial, state, mu_sigma
+        return post_model, posta, deci, trial, state, mu_sigma
 
 #    return data, data_flat
 if __name__ == '__main__':
-    main(data_type = ['full','pruned'], mu_range = (-5, 25), sd_range = (5,10),
-         subject = (0,1,2), trials = [6,7], return_results = False)
+    main(data_type = ['full','pruned'], mu_range = (-15, 40), sd_range = (2,13),
+         subject = (0,), trials = [0,1], return_results = False)
