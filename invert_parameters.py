@@ -556,13 +556,15 @@ if __name__ == '__main__':
 
     if args.trials is None:
         trials = [0,1,2,3,4,5,6,7,]
+    else:
+        trials = args.trials
 
     # Print message stating what is to be calculated
-    if args.v:
+    if args.verbose:
         print('Subjects to use: %s' %args.subjects)
         print('Mu and Sd intervals: %s, %s:' % (args.mu, args.sd))
-        print('Trials to use: %s' % args.trials)
+        print('Trials to use: %s' % trials)
     
-    main(data_type = ['full','pruned'], mu_range = (args.mu_ini, args.mu_end),
-         sd_range = args.mu, subject = (args.subjects,),
+    main(data_type = ['full','pruned'], mu_range = args.mu,
+         sd_range = args.sd, subject = args.subjects,
          trials = trials, return_results = False)
