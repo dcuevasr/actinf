@@ -509,7 +509,7 @@ def main(data_type, mu_range, sd_range, subject = 0,
         All values of Mu and Sd used for the models.
     """
 
-    path_to_data = None
+    path_to_data = '/home/dario/Proj_ActiveInference/Svens Data/logfiles/'
     import import_data as imda
     data = imda.import_kolling_data(path_to_data)
     data = imda.clean_data(data)
@@ -544,5 +544,25 @@ def main(data_type, mu_range, sd_range, subject = 0,
 
 #    return data, data_flat
 if __name__ == '__main__':
-    main(data_type = ['full','pruned'], mu_range = (30, 45), sd_range = (1,15),
-         subject = (2,), trials = [0,1,2,3,4,5,6,7], return_results = False)
+    import argparse
+    parser = argparse.ArgumentParser()
+
+    parser.add_argument('mu', nargs=2, help='(mu1, mu2) Interval for mu', type=int)
+    parser.add_argument('sd', nargs=2, help='(sd1, sd2) Interval for SD', type=int)
+    parser.add_argument('subjects', nargs='+', help='Subject number. Can be more than one.', type=int)
+    parser.add_argument('-t', '--trials', nargs='+', help='List of trials to use', type=int)
+    parser.add_argument('-v', '--verbose', help='Verbose flag', action='store_true')
+    args = parser.parse_args()
+
+    if args.trials is None:
+        trials = [0,1,2,3,4,5,6,7,]
+
+    # Print message stating what is to be calculated
+    if args.v:
+        print('Subjects to use: %s' %args.subjects)
+        print('Mu and Sd intervals: %s, %s:' % (args.mu, args.sd))
+        print('Trials to use: %s' % args.trials)
+    
+    main(data_type = ['full','pruned'], mu_range = (args.mu_ini, args.mu_end),
+         sd_range = args.mu, subject = (args.subjects,),
+         trials = trials, return_results = False)
