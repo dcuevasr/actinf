@@ -142,6 +142,7 @@ def test_past_threshold(data):
     The purpose is to see what cutoff should be used (i.e. how many points
     past-threshold should be included in the actinf simulations).
     """
+#    from matplotlib import pyplot as plt
     nZ = len(data)
 
     threses = np.unique(data[0]['threshold'])
@@ -162,6 +163,8 @@ def test_past_threshold(data):
 
     for nt in range(nThres):
         dist[threses[nt]] = np.reshape(np.array(dist[threses[nt]]),(-1))
+
+
     return dist
 
 def plot_past_threshold(dist):

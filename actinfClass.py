@@ -115,6 +115,9 @@ class Actinf(object):
 #        print PriorPrecision, self.gamma
         V = Policies
         cNp = np.shape(V)[0]
+
+
+
         w = np.array(range(cNp))
         x = PosteriorLastState
         W = PriorPrecision
@@ -124,6 +127,18 @@ class Actinf(object):
         u = np.zeros(cNp)
         P = np.zeros(self.Nu)
 
+
+        # V can be given as the action sequences starting at trial t, instead
+        # of the full array (starting at trial 0). This is done to avoid doing
+        # extra calculations on ''repeated'' entries on V, when observations
+        # are being processed as independent (as oppossed to as part of a
+        # game). In this case, pad the left-hand side of the array with zeros,
+        # to make it consistent with everything else. These values will not be
+        # used for any calculations:
+        if V.shape[1] != T:
+            V = np.hstack([-np.ones((V.shape[0],T - V.shape[1]), dtype=int), V])
+
+
         # A 'false' set of transition matrices can be fed to the Agent,
         # depending on the newB input above. No input means that the ones from
         # the actinf class are used:
@@ -131,7 +146,7 @@ class Actinf(object):
             B = self.B
         else:
             if np.shape(newB) != np.shape(self.B):
-                raise Exception('BadInput: The provided transition matrices'+
+                raise ValueError('The provided transition matrices'+
                                 ' do not have the correct size')
             B = newB
 
@@ -148,6 +163,7 @@ class Actinf(object):
             for j in range(t,T):
                 # transition probability from current state
                 xt = sp.dot(B[V[k, j],:,:], xt)
+#                raise Exception('stooooop')
                 ot = sp.dot(self.A, xt)
                 # Predicted Divergence
                 Q[k] += self.H.dot(xt) + (self.lnC - np.log(ot)).dot(ot)
@@ -162,14 +178,16 @@ class Actinf(object):
             # policy (u)
             u[w] = utils.softmax(W*Q)
             # precision (W)
-            b = self.lambd*b + (1 - self.lambd)*(self.beta -
-                sp.dot(u[w],Q))
+            b = self.lambd*b + (1 - self.lambd)*(self.beta - sp.dot(u[w],Q))
             W = self.alpha/b
             precisionUpdates.append(W)
         # Calculate the posterior over policies and over actions.
         for j in range(self.Nu):
             P[j] = np.sum(u[w[utils.ismember(V[:,t],j)]])
 
+
+#        print(P, flush=True)
+#        raise Exception('stooooop')
         if PreUpd is True:
             return x, P, precisionUpdates
         else:

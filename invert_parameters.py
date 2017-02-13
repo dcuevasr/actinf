@@ -20,6 +20,7 @@ import numpy as np
 import pickle
 import atexit
 import multiprocessing as mp
+import itertools
 
 def _remove_above_thres(deci, trial, state, thres, multiplier = 1.2):
     """Removes any observation that goes above the cutoff. """
@@ -28,7 +29,7 @@ def _remove_above_thres(deci, trial, state, thres, multiplier = 1.2):
     return deci[indices], trial[indices], state[indices], thres[indices]
 
 def infer_parameters(mu_range = None, sd_range = None, num_games = None,
-                     data = None, write_file = True):
+                     data = None):
     """ Calculates the likelihood for every model provided.
 
     Each model is created with different values of the mean and sd of a
@@ -38,11 +39,6 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     the likelihood for each model.
 
     If no data is provided, it is simulated with betClass.py.
-
-    All posteriors are saved into a file for future use. This is independent of
-    the write_file parameter (see description below); write_file controls
-    whether the results of the current execution are saved to a standalone
-    file which is pretty much useless at this point. Might deprecate later.
 
     The file ./data/posteriors.pi is used to store a dictionary whose keys are
     the tuples (mu, sd, obs, trial, threshold) and its elements are the
@@ -92,8 +88,6 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
             'TargetLevels': np.array[(1)], dtype = int
                 All distinct threshold in the trial. It's equivalent to
                 np.unique(data['threshold']).
-    write_file: bool
-        Whether or not write everything to a file.
 
 
     Returns
@@ -157,7 +151,7 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
 
     mabed = {}
     for lvl in target_levels: #one actinf for every threshold
-        mabed[lvl] = bc.betMDP(nT = 9, nS = np.round(lvl*1.2).astype(int), thres = int(lvl))
+        mabed[lvl] = bc.betMDP(nT = 8, nS = np.round(lvl*1.2).astype(int), thres = int(lvl))
     print('Calculating log-priors (goals)...', end='', flush = True)
     mu_sigma = np.zeros((mu_size, sd_size, 2))
 #    arr_lnc = np.zeros((max_mean-min_mean, max_sigma-min_sigma, len(state), mabes.Ns))
@@ -212,19 +206,6 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     # Marginalize
     marginal_data = likelihood_model.sum()
     prob_data = likelihood_model/marginal_data
-    #%% Writing data to files
-    if write_file is True:
-        explanation = ('1: likelihood for all models. 2: posteriors over actions for'+
-                       ' all values of the parameters. 3: (data) observed states. 4: '+
-                      ' (data) decisions at every trial. 5: (data) trial number for' +
-                      ' each observation. 6: all values of (mu, sigma) used to build' +
-                      ' the models')
-        now_date = str(round(time()))
-        filename = './data/model_inversion_sim_'+ now_date + '.npy'
-        np.save(filename, [likelihood_model,
-                post_act, deci, trial, state, mu_sigma])
-        with open('model_inversion_sim_KEY.txt', "w") as expl_file:
-            expl_file.write(explanation)
 
     print('The whole thing took: %d seconds.' % (time() - t_ini))
     smiley = np.random.choice([':)', 'XD', ':P', '8D'])
@@ -237,6 +218,13 @@ def simulate_posteriors(min_mean, max_mean, min_sigma, max_sigma, as_seen,
     if wflag is True:
         atexit.register(_save_posteriors, posta_inferred,
                         trial, state, thres, mu_sigma)
+    T = max(trial)+1 #need this +1 since they start at 0
+    def get_Vs(trial):
+        return np.array(list(itertools.product(range(0,2),repeat = T - trial)), dtype=int)
+    le_V = {}
+    for t in range(T):
+        le_V[t] = get_Vs(t)
+
     for m, mu in enumerate(range(min_mean, max_mean)):
         for sd, sigma in enumerate(range(min_sigma,max_sigma)):
             for s in range(len(state)):
@@ -252,7 +240,7 @@ def simulate_posteriors(min_mean, max_mean, min_sigma, max_sigma, as_seen,
                 else:
                     mabed[thres[s]].lnC = arr_lnc[(m, sd, s)]
                     posta_inferred[(m, sd, s)] = mabed[thres[s]].posteriorOverStates(state[s],
-                               trial[s], mabed[thres[s]].V, mabed[thres[s]].D, 0, 15)[1:3]
+                               trial[s], le_V[trial[s]], mabed[thres[s]].D, 0, 15)[1:3]
                     assert posta_inferred[(m, sd, s)] != (), \
                               'posteriorOverStates returned empty for mu = %d, '\
                               'sd = %d and obs = %d, t = %d, thres = %d'\
@@ -369,6 +357,8 @@ def _calculate_likelihood(deci, post_act):
 
 def _save_posteriors(post_act, trial, state, thres, mu_sigma):
     """ Save the posterior over actions given the observations and other data.
+    It first loads the data file again and adds to it whatever is in post_act;
+    then it saves the file again with the added data.
 
     The idea is that every time the infer_parameters() is ran, the posteriors
     are saved in a file, which can then be used in future runs to read the
@@ -380,7 +370,7 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma):
     posteriors over actions are, so the tuple is a good identifier.
     """
     import pickle
-    print('Saving posteriors to file...', end=' ')
+    print('Saving posteriors to file...', end=' ', flush=True)
     # read data from file
     data_file = './data/posteriors.pi'
     try:
@@ -420,6 +410,45 @@ def _check_data(): # TODO: delete
     for k, keys in enumerate(data.keys()):
         post[k, :] = data[keys][1]
     return post
+
+def find_saved_posteriors(subject_data):
+    """ Finds out which of the observations in the data have already been
+    simulated (and for which parameter values).
+    """
+    import pickle
+    from tqdm import tqdm
+    # read data from file
+    data_file = './data/posteriors.pi'
+
+    les_noms = ['mu', 'sd']
+    with open(data_file, 'rb') as mafi:
+        data = pickle.load(mafi)
+    state = subject_data['obs']
+    trial = subject_data['trial']
+    thres = subject_data['threshold']
+
+    nObs = state.size
+    seen = {}
+    print('Begin checking data...', flush=True)
+    for o in tqdm(range(nObs)):
+        seen[(o,)] = {'mu':set(), 'sd':set()}
+        for makey in data.keys():
+            if makey[2]==state[o] and makey[3]==trial[o] and makey[4]==thres[o]:
+                seen[(o,)]['mu'].add(makey[0])
+                seen[(o,)]['sd'].add(makey[1])
+
+
+
+    # Find the values for mu and sd that are there for this subject
+    print('Begin finding ranges...', flush = True)
+    temp_set = {'mu':set(), 'sd':set()}
+    for o in tqdm(range(1,nObs)):
+        for name in les_noms:
+            temp_set[name] = seen[(o,)][name].intersection(seen[(o-1,)][name])
+
+    return temp_set, seen
+
+
 
 def main(data_type, mu_range, sd_range, subject = 0,
          games = 20, trials = None, return_results = True):
@@ -515,5 +544,5 @@ def main(data_type, mu_range, sd_range, subject = 0,
 
 #    return data, data_flat
 if __name__ == '__main__':
-    main(data_type = ['full','pruned'], mu_range = (-15, 40), sd_range = (2,13),
-         subject = (0,), trials = [0,1], return_results = False)
+    main(data_type = ['full','pruned'], mu_range = (30, 45), sd_range = (1,15),
+         subject = (2,), trials = [0,1,2,3,4,5,6,7], return_results = False)
