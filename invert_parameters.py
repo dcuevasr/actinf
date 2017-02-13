@@ -509,7 +509,7 @@ def main(data_type, mu_range, sd_range, subject = 0,
         All values of Mu and Sd used for the models.
     """
 
-    path_to_data = '/home/dario/Proj_ActiveInference/Svens Data/logfiles/'
+    path_to_data = None#'/home/dario/Proj_ActiveInference/Svens Data/logfiles/'
     import import_data as imda
     data = imda.import_kolling_data(path_to_data)
     data = imda.clean_data(data)
