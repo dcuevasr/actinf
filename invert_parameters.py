@@ -370,11 +370,13 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma):
     posteriors over actions are, so the tuple is a good identifier.
     """
     import pickle
+    from os import getpid
     print('Saving posteriors to file...', end=' ', flush=True)
     # read data from file
-    data_file = './data/posteriors.pi'
+    in_file  = './data/posteriors.pi'
+    out_file = './data/out_%d.pi' % getpid()
     try:
-        with open(data_file, 'rb') as mafi:
+        with open(in_file, 'rb') as mafi:
             data = pickle.load(mafi)
     except (FileNotFoundError, pickle.UnpicklingError, EOFError):
         data = {}
@@ -411,9 +413,33 @@ def _check_data(): # TODO: delete
         post[k, :] = data[keys][1]
     return post
 
+def concatenate_data():
+    """ Take all the files in ./data and put them in the main posteriors.pi
+    file.
+    """
+    import os
+    from import_data import cd
+    import pickle
+    
+    data_folder = './data/'
+    out_file = 'posteriors.pi'
+
+    with cd(data_folder):
+        files = [file for file in os.listdir('.') if file[:3] == 'out']
+
+    data = {}
+    for file in files:
+        with open(file, 'rb') as mafi:
+            data.update(pickle.load(file))
+
+    with open(out_file, 'wb') as mafi:
+        pickle.dump(data, mafi)
+    
 def find_saved_posteriors(subject_data):
     """ Finds out which of the observations in the data have already been
     simulated (and for which parameter values).
+
+    DOES NOT YET WORK
     """
     import pickle
     from tqdm import tqdm
