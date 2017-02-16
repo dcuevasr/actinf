@@ -64,10 +64,10 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     ----------
     mu_range: (int, int)
         Selects the range for the grid search on mu. It will search all
-        integers in the range [int, int).
+        integers in the range [int, int].
     sd_range: (int, int)
         Selects the range for the grid search on sd. It will search all
-        integers in the range [int, int).
+        integers in the range [int, int].
     num_games: int or tuple of ints
         Select which games to use with 'small' or 'simulated'. Defaults to all
         available games in the data, or 20 for 'simulated'.
@@ -140,9 +140,11 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
         max_mean = 10
     else:
         min_mean, max_mean = mu_range
+        max_mean += 1 #so the input mu_range=(mu1, mu2) is inclussive.
     if sd_range is None:
         min_sigma = 10 # >0
         max_sigma = 20 # Maximum value for the variance
+        max_sigma += 1
     else:
         min_sigma, max_sigma = sd_range
     mu_size = max_mean - min_mean
@@ -215,9 +217,19 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
 def simulate_posteriors(min_mean, max_mean, min_sigma, max_sigma, as_seen,
                         state, trial, thres, arr_lnc, mabed, wflag, mu_sigma):
     posta_inferred = {}
+    from signal import signal, SIGTERM
+    def _save_posteriors_local(signum, frame):
+        import os
+        """ Wraṕper to send to _save_posteriors from signal."""
+        _save_posteriors(posta_inferred, trial, state, thres, mu_sigma)
+        os._exit(0)
+
+
     if wflag is True:
         atexit.register(_save_posteriors, posta_inferred,
                         trial, state, thres, mu_sigma)
+        signal(SIGTERM, _save_posteriors_local) # because background processes ignore SIGINT
+
     T = max(trial)+1 #need this +1 since they start at 0
     def get_Vs(trial):
         return np.array(list(itertools.product(range(0,2),repeat = T - trial)), dtype=int)
@@ -373,14 +385,14 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma):
     from os import getpid
     print('Saving posteriors to file...', end=' ', flush=True)
     # read data from file
-    in_file  = './data/posteriors.pi'
+#    in_file  = './data/posteriors.pi'
     out_file = './data/out_%d.pi' % getpid()
-    try:
-        with open(in_file, 'rb') as mafi:
-            data = pickle.load(mafi)
-    except (FileNotFoundError, pickle.UnpicklingError, EOFError):
-        data = {}
-
+#    try:
+#        with open(in_file, 'rb') as mafi:
+#            data = pickle.load(mafi)
+#    except (FileNotFoundError, pickle.UnpicklingError, EOFError):
+#        data = {}
+    data = {}
     nMu, nSd, _ = mu_sigma.shape
     nSt = state.shape[0]
     for m in range(nMu):
@@ -391,7 +403,7 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma):
                           state[st], trial[st], thres[st])] = post_act[(m,s,st)]
                 except KeyError:
                     pass
-    with open(data_file, 'wb') as mafi:
+    with open(out_file, 'wb') as mafi:
         pickle.dump(data, mafi)
     print('Posteriors saved.')
 def _check_data(): # TODO: delete
@@ -420,21 +432,29 @@ def concatenate_data():
     import os
     from import_data import cd
     import pickle
-    
+
     data_folder = './data/'
     out_file = 'posteriors.pi'
 
     with cd(data_folder):
         files = [file for file in os.listdir('.') if file[:3] == 'out']
 
-    data = {}
-    for file in files:
-        with open(file, 'rb') as mafi:
-            data.update(pickle.load(file))
+        with open('posteriors.pi', 'rb') as mafi:
+            try:
+                data = pickle.load(mafi)
+            except (FileNotFoundError, pickle.UnpicklingError, EOFError):
+                data = {}
 
-    with open(out_file, 'wb') as mafi:
-        pickle.dump(data, mafi)
-    
+        for file in files:
+            with open(file, 'rb') as mafi:
+                data.update(pickle.load(mafi))
+
+        with open(out_file, 'wb') as mafi:
+            pickle.dump(data, mafi)
+
+        for file in files:
+            os.remove(file)
+
 def find_saved_posteriors(subject_data):
     """ Finds out which of the observations in the data have already been
     simulated (and for which parameter values).
@@ -502,10 +522,10 @@ def main(data_type, mu_range, sd_range, subject = 0,
         Select which trials to use with 'pruned' or 'simulated'.
     mu_range: (int, int)
         Selects the range for the grid search on mu. It will search all
-        integers in the range [int, int).
+        integers in the range [int, int].
     sd_range: (int, int)
         Selects the range for the grid search on sd. It will search all
-        integers in the range [int, int).
+        integers in the range [int, int].
     return_results: bool
         Whether to return the results to the caller (True; default) or not.
 
@@ -535,7 +555,7 @@ def main(data_type, mu_range, sd_range, subject = 0,
         All values of Mu and Sd used for the models.
     """
 
-    path_to_data = None#'/home/dario/Proj_ActiveInference/Svens Data/logfiles/'
+    path_to_data = '/home/dario/Proj_ActiveInference/Svens Data/logfiles/'
     import import_data as imda
     data = imda.import_kolling_data(path_to_data)
     data = imda.clean_data(data)
@@ -571,13 +591,18 @@ def main(data_type, mu_range, sd_range, subject = 0,
 #    return data, data_flat
 if __name__ == '__main__':
     import argparse
+    from os import getpid
+
+    print('pid: %s' % getpid())
+
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('mu', nargs=2, help='(mu1, mu2) Interval for mu', type=int)
-    parser.add_argument('sd', nargs=2, help='(sd1, sd2) Interval for SD', type=int)
+    parser.add_argument('-m', '--mu', nargs=2, help='(mu1, mu2) Interval for mu', type=int)
+    parser.add_argument('-s', '--sd', nargs=2, help='(sd1, sd2) Interval for SD', type=int)
     parser.add_argument('subjects', nargs='+', help='Subject number. Can be more than one.', type=int)
     parser.add_argument('-t', '--trials', nargs='+', help='List of trials to use', type=int)
     parser.add_argument('-v', '--verbose', help='Verbose flag', action='store_true')
+    parser.add_argument('-i', '--index', help='A single index to select parameter values', type=int)
     args = parser.parse_args()
 
     if args.trials is None:
@@ -585,12 +610,20 @@ if __name__ == '__main__':
     else:
         trials = args.trials
 
+    if args.index:
+        mu_vals = np.arange(-15, 45)
+        sd_vals = np.arange(1, 15)
+        indices = np.unravel_index(args.index, (mu_vals.size, sd_vals.size))
+        one_mu = mu_vals[indices[0]]
+        one_sd = sd_vals[indices[1]]
+        mu_range = (one_mu, one_mu)
+        sd_range = (one_sd, one_sd)
     # Print message stating what is to be calculated
     if args.verbose:
         print('Subjects to use: %s' %args.subjects)
         print('Mu and Sd intervals: %s, %s:' % (args.mu, args.sd))
         print('Trials to use: %s' % trials)
-    
+
     main(data_type = ['full','pruned'], mu_range = args.mu,
          sd_range = args.sd, subject = args.subjects,
          trials = trials, return_results = False)
