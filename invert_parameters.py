@@ -144,9 +144,10 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     if sd_range is None:
         min_sigma = 10 # >0
         max_sigma = 20 # Maximum value for the variance
-        max_sigma += 1
     else:
         min_sigma, max_sigma = sd_range
+        max_sigma += 1
+
     mu_size = max_mean - min_mean
     sd_size = max_sigma - min_sigma
     tini = time()
@@ -555,7 +556,7 @@ def main(data_type, mu_range, sd_range, subject = 0,
         All values of Mu and Sd used for the models.
     """
 
-    path_to_data = '/home/dario/Proj_ActiveInference/Svens Data/logfiles/'
+    path_to_data = None#'/home/dario/Proj_ActiveInference/Svens Data/logfiles/'
     import import_data as imda
     data = imda.import_kolling_data(path_to_data)
     data = imda.clean_data(data)
@@ -618,12 +619,15 @@ if __name__ == '__main__':
         one_sd = sd_vals[indices[1]]
         mu_range = (one_mu, one_mu)
         sd_range = (one_sd, one_sd)
+    else:
+        mu_range = args.mu
+        sd_range = args.sd
     # Print message stating what is to be calculated
     if args.verbose:
         print('Subjects to use: %s' %args.subjects)
-        print('Mu and Sd intervals: %s, %s:' % (args.mu, args.sd))
+        print('Mu and Sd intervals: %s, %s:' % (mu_range, sd_range))
         print('Trials to use: %s' % trials)
 
-    main(data_type = ['full','pruned'], mu_range = args.mu,
-         sd_range = args.sd, subject = args.subjects,
+    main(data_type = ['full','pruned'], mu_range = mu_range,
+         sd_range = sd_range, subject = args.subjects,
          trials = trials, return_results = False)
