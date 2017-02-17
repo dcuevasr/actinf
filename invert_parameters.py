@@ -598,12 +598,18 @@ if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-m', '--mu', nargs=2, help='(mu1, mu2) Interval for mu', type=int)
-    parser.add_argument('-s', '--sd', nargs=2, help='(sd1, sd2) Interval for SD', type=int)
-    parser.add_argument('subjects', nargs='+', help='Subject number. Can be more than one.', type=int)
-    parser.add_argument('-t', '--trials', nargs='+', help='List of trials to use', type=int)
-    parser.add_argument('-v', '--verbose', help='Verbose flag', action='store_true')
-    parser.add_argument('-i', '--index', help='A single index to select parameter values', type=int)
+    parser.add_argument('-m', '--mu', nargs=2,
+                        help='(mu1, mu2) Interval for mu', type=int)
+    parser.add_argument('-s', '--sd', nargs=2,
+                        help='(sd1, sd2) Interval for SD', type=int)
+    parser.add_argument('subjects', nargs='+',
+                        help='Subject number. Can be more than one.', type=int)
+    parser.add_argument('-t', '--trials', nargs='+',
+                        help='List of trials to use', type=int)
+    parser.add_argument('-v', '--verbose',
+                        help='Verbose flag', action='store_true')
+    parser.add_argument('-i', '--index',
+                        help='A single index to select parameter values', type=int)
     args = parser.parse_args()
 
     if args.trials is None:
@@ -611,7 +617,7 @@ if __name__ == '__main__':
     else:
         trials = args.trials
 
-    if args.index:
+    if args.index is not None:
         mu_vals = np.arange(-15, 45)
         sd_vals = np.arange(1, 15)
         indices = np.unravel_index(args.index, (mu_vals.size, sd_vals.size))
@@ -625,9 +631,9 @@ if __name__ == '__main__':
     # Print message stating what is to be calculated
     if args.verbose:
         print('Subjects to use: %s' %args.subjects)
-        print('Mu and Sd intervals: %s, %s:' % (mu_range, sd_range))
+        print('Mu and Sd intervals: (%d, %d), (%d, %d):'
+              % (mu_range[0], mu_range[1], sd_range[0], sd_range[1]))
         print('Trials to use: %s' % trials)
-
     main(data_type = ['full','pruned'], mu_range = mu_range,
          sd_range = sd_range, subject = args.subjects,
          trials = trials, return_results = False)

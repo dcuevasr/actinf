@@ -12,5 +12,5 @@
 #SBATCH --output=slurm-%A_%a.out
 
 SUBJNUMBER=0
-
-python invert_parameters -i $((SLURM_ARRAY_TASK_ID-1)) $SUBJNUMBER
+module load python/3.5.2-anaconda4.2.0
+python /projects/p_pdm/invert_parameters -v -i $((SLURM_ARRAY_TASK_ID-1)) $SUBJNUMBER
