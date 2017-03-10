@@ -31,6 +31,8 @@ Uses:
                         {0.9,0.3,1,3} will be used.
 
 """
+from __future__ import print_function # Probably unnecessary.
+
 import numpy as np
 import itertools
 import utils
@@ -198,23 +200,22 @@ class betMDP(afc.Actinf):
         obsnoise = self.obsnoise
         if parameters != None:
             if not isinstance(parameters,dict):
-                raise Exception('BadInput: ''parameters'' is not a dict')
+                raise ValueError('Input ''parameters'' is not a dict')
             expectedParameters = ['pL','pH','rL','rH']
             compareSets = set(parameters) & set(expectedParameters)
             if compareSets != set(expectedParameters):
-                raise Exception('BadInput: Paremeters does not contain the \
+                raise ValueError(' ''paremeters'' does not contain the \
                 required parameters')
             else:
-                pL = parameters['pL']
-                pH = parameters['pH']
-                rL = parameters['rL']
-                rH = parameters['rH']
-                nP = len(pL)
+                self.pL = parameters['pL']
+                self.pH = parameters['pH']
+                self.rL = parameters['rL']
+                self.rH = parameters['rH']
+                self.nP = nP = len(self.pL)
         else:
             # Default action pairs
-
             self.setActionPairs()
-            nP, pL, pH, rL, rH = self.nP, self.pL, self.pH, self.rL, self.rH
+            nP = self.nP
 
         # Define observation matrix
         A = np.eye(nS*nP) + obsnoise/nP
@@ -517,7 +518,7 @@ class betMDP(afc.Actinf):
         """ Sets the priors over last state (goals) to a Gaussian distribution,
         defined by Gmean and Gscale.
         """
-        from utils import allothers
+#        from utils import allothers
         from scipy.stats import norm
 
         points = np.arange(self.nS)
@@ -590,7 +591,7 @@ class betMDP(afc.Actinf):
 
         table_headers = ['Trial','State','Act Pair', 'Action', 'expL', 'expH',
                          'ProbAct0', 'ProbAct1']
-#        print tabulate(table_data, headers = table_headers)
+        print(tabulate(table_data, headers = table_headers))
 
 
     def all_points_and_trials(self, preserve_all = False):

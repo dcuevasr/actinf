@@ -115,10 +115,13 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
         as_seen = {}
         flag_write_posta = False #Don't write to file if simulated data
     else:
-        deci, trial, state, thres, reihe = data['choice'], data['trial'], data['obs'], data['threshold'], data['reihe']
+        deci, trial, state, thres, reihe = (data['choice'], data['trial'],
+                                            data['obs'], data['threshold'],
+                                            data['reihe'])
         state = np.round(state/10).astype(int)
         thres = np.round(thres/10).astype(int)
-        deci, trial, state, thres = _remove_above_thres(deci, trial, state, thres)
+        deci, trial, state, thres = _remove_above_thres(deci, trial,
+                                                        state, thres)
         target_levels = np.round(data['TargetLevels']/10)
         _shift_states(state, thres, reihe)
 #        nD = data['NumberGames']
@@ -154,7 +157,8 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
 
     mabed = {}
     for lvl in target_levels: #one actinf for every threshold
-        mabed[lvl] = bc.betMDP(nT = 8, nS = np.round(lvl*1.2).astype(int), thres = int(lvl))
+        mabed[lvl] = bc.betMDP(nT = 8, nS = np.round(lvl*1.2).astype(int),
+                               thres = int(lvl))
     print('Calculating log-priors (goals)...', end='', flush = True)
     mu_sigma = np.zeros((mu_size, sd_size, 2))
 #    arr_lnc = np.zeros((max_mean-min_mean, max_sigma-min_sigma, len(state), mabes.Ns))
@@ -221,7 +225,12 @@ def simulate_posteriors(min_mean, max_mean, min_sigma, max_sigma, as_seen,
     from signal import signal, SIGTERM
     def _save_posteriors_local(signum, frame):
         import os
-        """ Wraṕper to send to _save_posteriors from signal."""
+        """ Wrapper to send to _save_posteriors from signal.
+
+        Note that posta_inferred, defined above, is mutable. So when this
+        function is called, the current value of posta_inferred will be used,
+        instead of the empty dictionary.
+        """
         _save_posteriors(posta_inferred, trial, state, thres, mu_sigma)
         os._exit(0)
 
@@ -261,6 +270,9 @@ def simulate_posteriors(min_mean, max_mean, min_sigma, max_sigma, as_seen,
 
     return posta_inferred
 def call_mabe(le_input):
+    """ Wrapper to call mabe.posteriorOverStates. It needs to be on the main
+    namespace to be pickable for pool.
+    """
     mabe = le_input[0]
     ckey = le_input[1]
     return [ckey, mabe.posteriorOverStates(*le_input[2])[1:3]]
@@ -407,55 +419,55 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma):
     with open(out_file, 'wb') as mafi:
         pickle.dump(data, mafi)
     print('Posteriors saved.')
-def _check_data(): # TODO: delete
-    """ No idea what that is and it's never used... Probably a test that is no
-    longer necessary.
-    """
 
-    import pickle
-    import numpy as np
-    # read data from file
-    data_file = './data/posteriors.pi'
-    try:
-        with open(data_file, 'rb') as mafi:
-            data = pickle.load(mafi)
-    except (FileNotFoundError, pickle.UnpicklingError, EOFError):
-        data = {}
-    post = np.zeros((len(data.keys()), 2))
-    for k, keys in enumerate(data.keys()):
-        post[k, :] = data[keys][1]
-    return post
 
-def concatenate_data():
-    """ Take all the files in ./data and put them in the main posteriors.pi
-    file.
+def concatenate_data(data_folder=None, out_file=None, old_files=None):
+    r""" Concatenates all the out**.pi files into one dictionary and saves it
+    to the specified file.
+
+    Parameters
+    ----------
+        data_folder: string, default='posteriors.pi'
+            Folder where the data files (.pi) are.
+        out_file: string, default='./data'
+            File where previous data is found and where new data is saved.
+        old_files: {'move', 'delete'}, default=None
+            What to do with the individual out**.pi files: move them to a
+            backup folder, delete them or leave them where they are if no
+            value is passed.
     """
     import os
     from import_data import cd
     import pickle
+    from tqdm import tqdm
 
-    data_folder = './data/'
-    out_file = 'posteriors.pi'
+    if data_folder is None:
+        data_folder = './data/'
+    if out_file is None:
+        out_file = 'posteriors.pi'
 
     with cd(data_folder):
-        files = [file for file in os.listdir('.') if file[:3] == 'out']
-
-        with open('posteriors.pi', 'rb') as mafi:
-            try:
+        files = [file for file in os.listdir('.') if file[:3] == 'out' and file[-2:] == 'pi']
+        try:
+            with open('posteriors.pi', 'rb') as mafi:
                 data = pickle.load(mafi)
-            except (FileNotFoundError, pickle.UnpicklingError, EOFError):
-                data = {}
-
-        for file in files:
+        except (FileNotFoundError, pickle.UnpicklingError, EOFError):
+            data = {}
+        print('Joining dictionaries...', flush=True)
+        for file in tqdm(files):
             with open(file, 'rb') as mafi:
                 data.update(pickle.load(mafi))
-
+        print('Saving data...', flush=True)
         with open(out_file, 'wb') as mafi:
             pickle.dump(data, mafi)
-
-        for file in files:
-            os.remove(file)
-
+        if old_files=='delete':
+            for file in files:
+                os.remove(file)
+        elif old_files=='move':
+            with cd('./old_data'):
+                pass
+            for file in files:
+                os.rename(file, './old_data/'+file)
 def find_saved_posteriors(subject_data):
     """ Finds out which of the observations in the data have already been
     simulated (and for which parameter values).
@@ -495,7 +507,80 @@ def find_saved_posteriors(subject_data):
 
     return temp_set, seen
 
+def check_data_file(subjects = None, trials = None,
+                    mu_range = None, sd_range = None,
+                    data_file = None):
+    """ Checks whether the observations in the data have been simulated.
 
+    It can be limited to subjects, trials and parameter values.
+
+    Limiting by subjects and trials is not yet implemented.
+
+    Parameters
+    ----------
+    subjects: tuple, defaults to all
+    trials: tuple, defaults to all
+    mu_range: [min, max], defaults to [-15, 45]
+        Range of values for the parameter mu. The interval is inclussive on
+        both ends.
+    sd_range: [min, max], defaults to [1, 15]
+        Range of values for the parameter sd. The interval is inclussive on
+        both ends.
+    data_file: string, defaults to './data/posteriors.pi'
+        Path of the file where the simulated data is.
+
+    Returns
+    -------
+    was_found: bool
+        Returns True if all subjects/trials/parameters were found in the data
+        file. False otherwise.
+    """
+    import import_data as imda
+
+    _, datas = imda.main() #discard data, rename data_flat to data.
+    datas = [datas[1],]
+    for d, data in enumerate(datas):
+        deci, trial, state, thres, reihe = (data['choice'], data['trial'],
+                                        data['obs'], data['threshold'],
+                                        data['reihe'])
+
+        state = np.round(state/10).astype(int)
+        thres = np.round(thres/10).astype(int)
+        deci, trial, state, thres = _remove_above_thres(deci, trial, state, thres)
+        _shift_states(state, thres, reihe)
+
+        if data_file is None:
+            data_file = './data/posteriors.pi'
+
+        with open(data_file, 'rb') as mafi:
+            as_seen = pickle.load(mafi)
+
+        if mu_range is None:
+            min_mean = -15
+            max_mean = 46
+        else:
+            min_mean = mu_range[0]
+            max_mean = mu_range[1] + 1
+
+        if sd_range is None:
+            min_sigma = 1
+            max_sigma = 15
+        else:
+            min_sigma = sd_range[0]
+            max_sigma = sd_range[1] + 1
+
+#        flag_stop = 0
+        bad_set = set()
+        for m, mu in enumerate(range(min_mean, max_mean)):
+            for sd, sigma in enumerate(range(min_sigma,max_sigma)):
+                for s in range(len(state)):
+                    if (mu, sigma, state[s], trial[s]-1, thres[s]) not in as_seen:
+                        if (mu, sigma, state[s], trial[s]-1, thres[s]) not in bad_set:
+                            bad_set.add((mu, sigma, state[s], trial[s]-1, thres[s]))
+#                        print(d, mu, sigma, state[s], trial[s], thres[s], flush=True)
+
+#                        return False
+    return bad_set
 
 def main(data_type, mu_range, sd_range, subject = 0,
          games = 20, trials = None, return_results = True):

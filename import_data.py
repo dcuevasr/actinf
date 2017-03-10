@@ -19,12 +19,17 @@ from scipy import io
 class cd:
     """ Context thingy for temporarily changing working folder.
     """
-    def __init__(self, newPath):
+    def __init__(self, newPath, force=False):
         self.newPath = newPath
+        self.force = force
 
     def __enter__(self):
         self.oldPath = os.getcwd()
-        os.chdir(self.newPath)
+        try:
+            os.chdir(self.newPath)
+        except FileNotFoundError:
+            if self.force:
+                os.mkdir(self.newPath)
 
     def __exit__(self, etype, value, traceback):
         os.chdir(self.oldPath)
