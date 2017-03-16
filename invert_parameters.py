@@ -395,11 +395,17 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma):
     posteriors over actions are, so the tuple is a good identifier.
     """
     import pickle
-    from os import getpid
+    import os
     print('Saving posteriors to file...', end=' ', flush=True)
     # read data from file
 #    in_file  = './data/posteriors.pi'
-    out_file = './data/out_%d.pi' % getpid()
+    out_file = './data/out_%d.pi' % os.getpid()
+    k = 0
+    while os.path.isfile(out_file): #find file that doesn't exist. Stupid HPC
+        out_file = './data/out_%d_%d.pi' % (os.getpid(), k)
+        k += 1
+
+
 #    try:
 #        with open(in_file, 'rb') as mafi:
 #            data = pickle.load(mafi)
