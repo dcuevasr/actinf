@@ -22,11 +22,25 @@ import atexit
 import multiprocessing as mp
 import itertools
 
-def _remove_above_thres(deci, trial, state, thres, multiplier = 1.2):
+
+def _remove_above_thres(deci, trial, state, thres, reihe, multiplier = 1.2):
     """Removes any observation that goes above the cutoff. """
 
     indices = state <= np.array(multiplier*thres, dtype=int)
-    return deci[indices], trial[indices], state[indices], thres[indices]
+    return deci[indices], trial[indices], state[indices], thres[indices], reihe[indices]
+
+#    nT = len(deci)
+#    de = []
+#    tr = []
+#    th = []
+#    st = []
+#    for t in range(nT):
+#        if state[t] <= multiplier*thres[t]:
+#            de.append(deci[t])
+#            tr.append(trial[t])
+#            th.append(thres[t])
+#            st.append(state[t])
+#    return np.array(de), np.array(tr), np.array(st), np.array(th)
 
 def infer_parameters(mu_range = None, sd_range = None, num_games = None,
                      data = None):
@@ -103,7 +117,7 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     """
 
     print('Running...')
-    flag_write_posta = True
+    flag_write_posta = False
     t_ini = time()
 
 
@@ -120,9 +134,11 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
                                             data['reihe'])
         state = np.round(state/10).astype(int)
         thres = np.round(thres/10).astype(int)
-        deci, trial, state, thres = _remove_above_thres(deci, trial,
-                                                        state, thres)
+        deci, trial, state, thres, reihe = _remove_above_thres(deci, trial,
+                                                        state, thres, reihe)
         target_levels = np.round(data['TargetLevels']/10)
+#        return 1, 1, 1, trial, state, thres
+
         _shift_states(state, thres, reihe)
 #        nD = data['NumberGames']
 #        nT = data['NumberTrials']
@@ -136,7 +152,6 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
                 as_seen = {}
                 print('%s file not found, or contains no valid data.' % data_file)
     # Read the file of already-encountered observations
-
     #%% Create mesh of parameter values
     if mu_range is None:
         min_mean = -10 # grid search values for thres + mu
@@ -163,11 +178,13 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     mu_sigma = np.zeros((mu_size, sd_size, 2))
 #    arr_lnc = np.zeros((max_mean-min_mean, max_sigma-min_sigma, len(state), mabes.Ns))
     arr_lnc = {}
+#    return 1, 1, 1, trial, state, thres
     for m, mu in enumerate(range(min_mean, max_mean)):
         for sd, sigma in enumerate(range(min_sigma,max_sigma)):
             for s in range(len(state)):
                 mu_sigma[m, sd, :] = [mu, sigma]
                 if (mu, sigma, state[s], trial[s], thres[s]) not in as_seen:
+                    flag_write_posta = True # write to file if new stuff found
                     arr_lnc[(m, sd, s)] = np.log(mabed[thres[s]].set_prior_goals(
                                                      selectShape='unimodal',
                                                      Gmean = mu+thres[s],
@@ -365,6 +382,7 @@ def simulate_data(num_games = 10, paradigm = None):
 
 def _shift_states(states, thres, reihe, multiplier = 1.2):
     """ 'convolves' the states from the data with the 8 action pairs."""
+#    raise Exception
     for s, sta in enumerate(states):
         states[s] = (sta + multiplier*thres[s]*(reihe[s]-1)).astype(int)
 
@@ -588,7 +606,7 @@ def check_data_file(subjects = None, trials = None,
 #                        return False
     return bad_set
 
-def main(data_type, mu_range, sd_range, subject = 0,
+def main(data_type, mu_range, sd_range, subject = 0, threshold = None,
          games = 20, trials = None, return_results = True):
     r""" main(data_type, subject, mu_range, sd_range [, games] [, trials]
               [, return_results])
@@ -598,12 +616,17 @@ def main(data_type, mu_range, sd_range, subject = 0,
 
     Parameters
     ----------
-    data_type: {'full', 'small','pruned', 'simulated'}
+    data_type: {'full', 'small','pruned', 'simulated', 'threshold'}
         Determines the type of data to be used. 'full' uses all the games and
         trials. 'small' uses the selected number of games, with all trials.
         'pruned' uses the selected trials, all games. Combining 'full' or
         'small' with 'pruned' is possible. 'simulated' simulates data using
-        active inference itself. Defaults to 'simulated'.
+        active inference itself. Defaults to 'simulated'. 'threshold' runs
+        the simulations only for those trials (games) with the given threshold;
+        the optional parameter threshold (see below) must be provided.
+    threshold: int
+        Used with data_type = 'threshold', indicates which threshold (as
+        indexed in the data) will be used from the data.
     subjects: int or tuple of ints
         Selects the subjects to use. Numbers bigger than the available number
         of subjects will be quietly ignored. Defaults to 0.
@@ -654,6 +677,7 @@ def main(data_type, mu_range, sd_range, subject = 0,
     imda.enhance_data(data)
     data_flat = imda.flatten_data(data)
     imda.add_initial_obs(data_flat)
+
     if data_type == 'simulated':
         likeli, posta, deci, trial, state, mu_sigma = (
                            infer_parameters(mu_range = mu_range,
@@ -665,6 +689,16 @@ def main(data_type, mu_range, sd_range, subject = 0,
         if trials is None:
             raise ValueError('No trials were selected for pruning.')
         data_flat = imda.prune_trials(data_flat, trials)
+    if 'threshold' in data_type:
+        if threshold is None:
+            raise ValueError('A value for the input -threshold- must be' +
+                              ' provided with data_type = ''threshold'' ')
+        for datum in data_flat:
+            target_thres = datum['TargetLevels'][threshold]
+            indices = datum['threshold']==target_thres
+            for field in ['obs','choice','reihe', 'trial', 'threshold']:
+                datum[field] = datum[field][indices]
+
     if isinstance(subject, int):
         subject = subject,
     post_model = {}
@@ -679,6 +713,8 @@ def main(data_type, mu_range, sd_range, subject = 0,
                                   sd_range=sd_range, data=data_flat[s]))
     if return_results is True:
         return post_model, posta, deci, trial, state, mu_sigma
+
+
 
 #    return data, data_flat
 if __name__ == '__main__':

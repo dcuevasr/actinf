@@ -45,6 +45,7 @@ def import_kolling_data(path_to_data = None):
         data = []
         for file in files:
             data.append(io.loadmat(file))
+            data[-1]['filename'] = file
     if not data:
         raise RuntimeError('No .mat files in the specified folder.')
     return data
@@ -106,7 +107,10 @@ def flatten_data(data):
     return data_flat
 
 def add_initial_obs(data_flat):
-    R""" Adds the initial observation to the data.
+    R""" Adds the initial observation to the data. To do this, it removes the
+    last observation from each game (from the data) and adds a zero at the
+    beginning of each game, changing the concept from "observations after
+    action was taken" to "observations before action was taken".
 
     Works in-place.
     """
@@ -225,5 +229,5 @@ def main(path_to_data = None):
 if __name__ == "__main__":
     data, data_flat = main()
     small = small_data(data_flat, 10)
-    small_prune = prune_trials(small, [5,6,7])
-    prune = prune_trials(data_flat, [5,6,7])
+    small_prune = prune_trials(small, [0,1,2])
+    prune = prune_trials(data_flat, [0,1,2])
