@@ -29,18 +29,6 @@ def _remove_above_thres(deci, trial, state, thres, reihe, multiplier = 1.2):
     indices = state <= np.array(multiplier*thres, dtype=int)
     return deci[indices], trial[indices], state[indices], thres[indices], reihe[indices]
 
-#    nT = len(deci)
-#    de = []
-#    tr = []
-#    th = []
-#    st = []
-#    for t in range(nT):
-#        if state[t] <= multiplier*thres[t]:
-#            de.append(deci[t])
-#            tr.append(trial[t])
-#            th.append(thres[t])
-#            st.append(state[t])
-#    return np.array(de), np.array(tr), np.array(st), np.array(th)
 
 def infer_parameters(mu_range = None, sd_range = None, num_games = None,
                      data = None):
@@ -336,13 +324,30 @@ def simulate_posteriors_par(min_mean, max_mean, min_sigma, max_sigma, as_seen,
     posta_inferred.update(mamu.posta)
     return posta_inferred
 
-def simulate_data(num_games = 10, paradigm = None):
+def simulate_data(num_games = 10, paradigm = None, nS = 100, thres = None,
+                  mu = None, sd = None):
     """ Simulates data for the kolling experiment using active inference.
 
-    Inputs:
-        num_games: {1} Number of games to simulate (each with 8 trials or so).
-        paradigm: {string} Paradigm to use (see betClass.py for more on this).
-    Outputs: (nD = number of games; nT = number of trials per game; nO =
+    Parameters
+    ----------
+        num_games: int
+            Number of games to simulate (each with 8 trials or so).
+        paradigm: string
+            Paradigm to use (see betClass.py for more on this).
+        thres: int
+            Threshold to use when calculating lnC for the agent
+        nS: int
+            Number of total (non-convoluted) states.
+        mu, sd: int
+            Hyperparameters for calculating lnC. When provided, the base
+            lnC is overwritten by a normal with the given parameters. See
+            betClass for more info. mu should be provided as a relative value,
+            with respect to the threshold. For example, for a threshold of 10,
+            mu=-1 would mean that the normal is centered at 10-1 = 9.
+
+    Returns
+    -------
+    (nD = number of games; nT = number of trials per game; nO =
               number of observable states)
         mabes       {class} Instance of betClass used for the data.
         data        {nD*nT} Decisions made by the agent at every observation.
@@ -354,11 +359,19 @@ def simulate_data(num_games = 10, paradigm = None):
         nD
         nT
     """
+    flag_lnc = False
+    if mu + sd == 1:
+        raise ValueError('mu and sd must both be provided')
+    elif mu + sd == 2:
+        flag_lnc = True
 
+    mabes = bc.betMDP(nS = nS, thres = thres)
+    if flag_lnc:
+        mabes.set_prior_goals(selectShape='unimodal',
+                              Gmean = mu+thres, Gscale= sd,
+                              just_return = False, convolute = True,
+                              cutoff = False)
 
-    mabes = bc.betMDP(nS = 100)
-    mabes.gamma = 1
-    mabes.thres = 90
     nD = num_games  # Number of games played by subjects
     nT = mabes.nT
     deci = np.zeros(nD*nT, dtype=np.float64)
@@ -378,7 +391,6 @@ def simulate_data(num_games = 10, paradigm = None):
     for n, st in enumerate(state):
         stateV[n, st] = 1
     return mabes, deci, trial, state, thres, posta, preci, stateV, nD, nT
-
 
 def _shift_states(states, thres, reihe, multiplier = 1.2):
     """ 'convolves' the states from the data with the 8 action pairs."""
@@ -607,7 +619,8 @@ def check_data_file(subjects = None, trials = None,
     return bad_set
 
 def main(data_type, mu_range, sd_range, subject = 0, threshold = None,
-         games = 20, trials = None, return_results = True):
+         games = 20, trials = None, sim_mu = None, sim_sd = None,
+         return_results = True):
     r""" main(data_type, subject, mu_range, sd_range [, games] [, trials]
               [, return_results])
 
@@ -678,27 +691,36 @@ def main(data_type, mu_range, sd_range, subject = 0, threshold = None,
     data_flat = imda.flatten_data(data)
     imda.add_initial_obs(data_flat)
 
-    if data_type == 'simulated':
-        likeli, posta, deci, trial, state, mu_sigma = (
-                           infer_parameters(mu_range = mu_range,
-                           sd_range = sd_range,
-                           data = None, num_games = games))
-    if 'small' in data_type:
-        data_flat = imda.small_data(data_flat, nGames = games) # TODO: select which games
-    if 'pruned' in data_type:
-        if trials is None:
-            raise ValueError('No trials were selected for pruning.')
-        data_flat = imda.prune_trials(data_flat, trials)
-    if 'threshold' in data_type:
-        if threshold is None:
-            raise ValueError('A value for the input -threshold- must be' +
-                              ' provided with data_type = ''threshold'' ')
-        for datum in data_flat:
-            target_thres = datum['TargetLevels'][threshold]
-            indices = datum['threshold']==target_thres
-            for field in ['obs','choice','reihe', 'trial', 'threshold']:
-                datum[field] = datum[field][indices]
+    # Work (or generate) the data:
+    if 'simulated' in data_type:
+        if 'threshold' in data_type: #simulate data with the given thres
+            if 'small' in data_type:
+                games = max(12, games)
+            else:
+                games = 12
+            nS = np.ceil(1.2*threshold)
+            mabes, deci, trial, state, thres, posta, preci, stateV, nD, nT = (
+                              simulate_data(num_games = 12, thres = threshold,
+                                            nS = nS, mu = sim_mu, sd = sim_sd))
 
+    else:
+        if 'small' in data_type:
+            data_flat = imda.small_data(data_flat, nGames = games) # TODO: select which games
+        if 'pruned' in data_type:
+            if trials is None:
+                raise ValueError('No trials were selected for pruning.')
+            data_flat = imda.prune_trials(data_flat, trials)
+        if 'threshold' in data_type:
+            if threshold is None:
+                raise ValueError('A value for the input -threshold- must be' +
+                                  ' provided with data_type = ''threshold'' ')
+            for datum in data_flat:
+                target_thres = datum['TargetLevels'][threshold]
+                indices = datum['threshold']==target_thres
+                for field in ['obs','choice','reihe', 'trial', 'threshold']:
+                    datum[field] = datum[field][indices]
+
+    # Run the inversion:
     if isinstance(subject, int):
         subject = subject,
     post_model = {}

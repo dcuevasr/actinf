@@ -401,13 +401,22 @@ class betMDP(afc.Actinf):
                             input rampX1 can be selected (default 1). When
                             using 'unimodal', Gmean and Gscale can be set to
                             change the mean (in Trial number) and scale of the
-                            Gaussian. Selecting a Gmean pre-threshold will
+                            Gaussian. Selecting a Gmean pre-threshold
+                            and a value for cutoff of False
                             cause the 'hump' to be invisible and the priors
                             will be an exponential ramp down.
         rampX1              {x} determines the initial point for the ramp,
                             which uniquely determines the slope of the ramp.
         Gmean, Gscale       {x}{y} determine the mean and the scale of the
                             Gaussian for the unimodal version.
+        convolute           {bool} If True, C will be calculated for the full
+                            state space nS*nU, where nU is the number of action
+                            pairs. If False, C will be in the nS space.
+        cutoff              {bool} If True, the priors over last state (C) will
+                            be set to zero pre-threshold and re-normalized.
+        just_return         {bool} If True, the calculated value for C will be
+                            returned and no further action taken. If False,
+                            both C and lnC will be written into self.
         Outputs:
         (Note: when just_return is False, nothing is returned)
         goals               [nS] are the resulting priors over last state.
@@ -434,11 +443,15 @@ class betMDP(afc.Actinf):
             return goals
         elif just_return is False and convolute is True:
             self.C = goals
+            self.C += (np.min(self.C)==0)*np.exp(-16)
+            self.C = self.C/self.C.sum(axis=0)
+            self.lnC = np.log(self.C)
         else:
             raise ValueError('Bad combination of just_return and convolute')
 
 
     def prior_goals_flat(self, convolute = True, just_return = True):
+        """To be called from set_prior_goals()."""
         from utils import allothers
 
         if convolute is True:
@@ -468,6 +481,8 @@ class betMDP(afc.Actinf):
         after threshold. If rampX1 is smaller than M (where M is the number of
         points past-threshold), then the ramp is increasing. The slope is
         calculated automatically (since rampX1 determines it uniquely).
+
+        To be called from set_prior_goals().
         """
         from utils import allothers
 
@@ -516,7 +531,7 @@ class betMDP(afc.Actinf):
     def prior_goals_unimodal(self, Gmean, Gscale,
                            convolute = True, cutoff = True, just_return = True):
         """ Sets the priors over last state (goals) to a Gaussian distribution,
-        defined by Gmean and Gscale.
+        defined by Gmean and Gscale. To be called from set_prior_goals().
         """
 #        from utils import allothers
         from scipy.stats import norm
