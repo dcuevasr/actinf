@@ -582,7 +582,7 @@ def check_data_file(subjects = None, trials = None,
 
         state = np.round(state/10).astype(int)
         thres = np.round(thres/10).astype(int)
-        deci, trial, state, thres = _remove_above_thres(deci, trial, state, thres)
+        deci, trial, state, thres, reihe = _remove_above_thres(deci, trial, state, thres, reihe)
         _shift_states(state, thres, reihe)
 
         if data_file is None:
