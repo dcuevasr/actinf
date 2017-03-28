@@ -40,7 +40,9 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     observations contained in Data. These posteriors are then used to calculate
     the likelihood for each model.
 
-    If no data is provided, it is simulated with betClass.py.
+    If no data is provided, it is simulated with betClass.py. [This has been
+    deprecated (in principle) by the code in main() that simulates data before
+    infer_parameters() is called.]
 
     The file ./data/posteriors.pi is used to store a dictionary whose keys are
     the tuples (mu, sd, obs, trial, threshold) and its elements are the
@@ -572,9 +574,14 @@ def check_data_file(subjects = None, trials = None,
         file. False otherwise.
     """
     import import_data as imda
-
+    if not (isinstance(subjects, int) or len(subjects)==1 or subjects is None):
+        raise NotImplementedError('Only single subject is implemented')
+    if subjects is None:
+        subjects = 0
+        print('Zero-th subject chosen')
+        
     _, datas = imda.main() #discard data, rename data_flat to data.
-    datas = [datas[1],]
+    datas = [datas[subjects],]
     for d, data in enumerate(datas):
         deci, trial, state, thres, reihe = (data['choice'], data['trial'],
                                         data['obs'], data['threshold'],
@@ -610,9 +617,9 @@ def check_data_file(subjects = None, trials = None,
         for m, mu in enumerate(range(min_mean, max_mean)):
             for sd, sigma in enumerate(range(min_sigma,max_sigma)):
                 for s in range(len(state)):
-                    if (mu, sigma, state[s], trial[s]-1, thres[s]) not in as_seen:
-                        if (mu, sigma, state[s], trial[s]-1, thres[s]) not in bad_set:
-                            bad_set.add((mu, sigma, state[s], trial[s]-1, thres[s]))
+                    if (mu, sigma, state[s], trial[s], thres[s]) not in as_seen:
+                        if (mu, sigma, state[s], trial[s], thres[s]) not in bad_set:
+                            bad_set.add((mu, sigma, state[s], trial[s], thres[s]))
 #                        print(d, mu, sigma, state[s], trial[s], thres[s], flush=True)
 
 #                        return False
@@ -767,8 +774,8 @@ if __name__ == '__main__':
         trials = args.trials
 
     if args.index is not None:
-        mu_vals = np.arange(-15, 45)
-        sd_vals = np.arange(1, 15)
+        mu_vals = np.arange(-15, 45+1) #make it inclussive
+        sd_vals = np.arange(1, 15+1) #make it inclussive
         indices = np.unravel_index(args.index, (mu_vals.size, sd_vals.size))
         one_mu = mu_vals[indices[0]]
         one_sd = sd_vals[indices[1]]
