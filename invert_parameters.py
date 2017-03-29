@@ -26,12 +26,13 @@ import itertools
 def _remove_above_thres(deci, trial, state, thres, reihe, multiplier = 1.2):
     """Removes any observation that goes above the cutoff. """
 
-    indices = state <= np.array(multiplier*thres, dtype=int)
-    return deci[indices], trial[indices], state[indices], thres[indices], reihe[indices]
+    indices = state < np.array(multiplier*thres, dtype=int)
+    return (deci[indices], trial[indices], state[indices], thres[indices],
+            reihe[indices])
 
 
 def infer_parameters(mu_range = None, sd_range = None, num_games = None,
-                     data = None):
+                     data = None, as_seen = None):
     """ Calculates the likelihood for every model provided.
 
     Each model is created with different values of the mean and sd of a
@@ -116,7 +117,8 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
          preci, stateV, nD, nT) = simulate_data(num_games)
 #        max_state = mabes.nS
 #        Ns = mabes.Ns
-        as_seen = {}
+        if as_seen is None:
+            as_seen = {}
         flag_write_posta = False #Don't write to file if simulated data
     else:
         deci, trial, state, thres, reihe = (data['choice'], data['trial'],
@@ -133,14 +135,15 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
 #        nD = data['NumberGames']
 #        nT = data['NumberTrials']
         NuData = thres.size
-        data_file = './data/posteriors.pi'
-        try:
-            with open(data_file, 'rb') as mafi:
-                as_seen = pickle.load(mafi)
-                print('File opened; data loaded.')
-        except (FileNotFoundError, pickle.UnpicklingError, EOFError):
-                as_seen = {}
-                print('%s file not found, or contains no valid data.' % data_file)
+        if as_seen is None:
+            data_file = './data/posteriors.pi'
+            try:
+                with open(data_file, 'rb') as mafi:
+                    as_seen = pickle.load(mafi)
+                    print('File opened; data loaded.')
+            except (FileNotFoundError, pickle.UnpicklingError, EOFError):
+                    as_seen = {}
+                    print('%s file not found, or contains no valid data.' % data_file)
     # Read the file of already-encountered observations
     #%% Create mesh of parameter values
     if mu_range is None:
@@ -579,7 +582,7 @@ def check_data_file(subjects = None, trials = None,
     if subjects is None:
         subjects = 0
         print('Zero-th subject chosen')
-        
+
     _, datas = imda.main() #discard data, rename data_flat to data.
     datas = [datas[subjects],]
     for d, data in enumerate(datas):
@@ -627,7 +630,7 @@ def check_data_file(subjects = None, trials = None,
 
 def main(data_type, mu_range, sd_range, subject = 0, threshold = None,
          games = 20, trials = None, sim_mu = None, sim_sd = None,
-         return_results = True):
+         as_seen = None, return_results = True):
     r""" main(data_type, subject, mu_range, sd_range [, games] [, trials]
               [, return_results])
 
@@ -739,7 +742,8 @@ def main(data_type, mu_range, sd_range, subject = 0, threshold = None,
     for s in subject:
         (post_model[s], posta[s], deci[s], trial[s], state[s], mu_sigma[s]) = (
                                   infer_parameters(mu_range = mu_range,
-                                  sd_range=sd_range, data=data_flat[s]))
+                                  sd_range=sd_range, data=data_flat[s],
+                                  as_seen = as_seen))
     if return_results is True:
         return post_model, posta, deci, trial, state, mu_sigma
 
@@ -749,6 +753,7 @@ def main(data_type, mu_range, sd_range, subject = 0, threshold = None,
 if __name__ == '__main__':
     import argparse
     from os import getpid
+    import sys
 
     print('pid: %s' % getpid())
 
@@ -790,6 +795,8 @@ if __name__ == '__main__':
         print('Mu and Sd intervals: (%d, %d), (%d, %d):'
               % (mu_range[0], mu_range[1], sd_range[0], sd_range[1]))
         print('Trials to use: %s' % trials)
+    sys.stdout.flush()
+    raise Exception
     main(data_type = ['full','pruned'], mu_range = mu_range,
          sd_range = sd_range, subject = args.subjects,
          trials = trials, return_results = False)
