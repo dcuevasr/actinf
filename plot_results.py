@@ -138,7 +138,7 @@ def plot_all_pr(posta, mu_values, sd_values, fignum = 3):
     plt.suptitle(r'Actinf''s posterior probability of risky for different'+
                  ' values of $\mu$ and $\sigma$')
 
-def plot_by_thres(subjects = None, fignum = 4):
+def plot_by_thres(subjects = None, trials = None, fignum = 4):
     """ Calculate and plot the likeli for the given subjects, separating the
     different thresholds into sub-subplots.
     """
@@ -150,12 +150,15 @@ def plot_by_thres(subjects = None, fignum = 4):
         subjects = [0,1,2,3,4,5,6,7,8,9]
     elif isinstance(subjects, int):
         subjects = subjects,
+
+    if trials is None:
+        trials = [0,1,2,3,4,5,6,7,]
     target_levels = [595, 930, 1035, 1105]
     nSubs = len(subjects)
     nTL = 4 # Number of thresholds in the data
 
     tl1, tl2 = calc_subplots(nTL)
-    s1, s2 = calc_subplots(nSubs)
+    s2, s1 = calc_subplots(nSubs)
     fig = plt.figure(fignum)
     fig.clf()
     outer_grid = gridspec.GridSpec(s1,s2)
@@ -163,23 +166,27 @@ def plot_by_thres(subjects = None, fignum = 4):
     with open(data_file, 'rb') as mafi:
         as_seen = pickle.load(mafi)
         print('File opened; data loaded.')
+    plt.set_cmap('gray_r')
 
     for s in range(nSubs):
         inner_grid = gridspec.GridSpecFromSubplotSpec(tl1,tl2,
                               subplot_spec = outer_grid[s])
         for th in range(nTL):
             ax = plt.Subplot(fig, inner_grid[th])
-            likeli, _, _, _, _, _ = invp.main(data_type=['threshold'],
+            likeli, _, _, _, _, _ = invp.main(data_type=['threshold', 'pruned'],
                                   threshold=th, mu_range=(-15,45),
-                                  sd_range=(1,15), subject=subjects,
-                                  as_seen = as_seen, return_results=True)
+                                  sd_range=(1,15), subject=subjects[s],
+                                  trials = trials, as_seen = as_seen,
+                                  return_results=True)
 #            plot_likelihoods(likeli, None, ax)
             ax.imshow(likeli[subjects[s]], aspect=0.2, interpolation=None)
-            ax.set_title('S = %d, Thres = %d' % (s,target_levels[th]))
+            ax.tick_params(width=0.01)
+            ax.set_title('S = %d, Thres = %d' % (s,target_levels[th]),
+                                                 fontsize=10)
             ax.set_yticks([0,15,30,45,60])
-            ax.set_yticklabels([-15,0,15,30,45])
+            ax.set_yticklabels([-15,0,15,30,45], fontsize=10)
             ax.set_xticks([1,5,10])
-            plt.set_cmap('gray_r')
+            ax.set_xticklabels([1,5,10], fontsize=8)
 
             fig.add_subplot(ax)
 
@@ -193,8 +200,10 @@ def plot_by_thres(subjects = None, fignum = 4):
             ax.spines['top'].set_visible(True)
         if ax.is_last_row():
             ax.spines['bottom'].set_visible(True)
+            ax.set_xlabel(r'$\sigma$')
         if ax.is_first_col():
             ax.spines['left'].set_visible(True)
+            ax.set_ylabel(r'threshold + $\mu$')
         if ax.is_last_col():
             ax.spines['right'].set_visible(True)
 

@@ -293,7 +293,8 @@ class Actinf(object):
 
 #        print 'See the Example dictionary for the results\n'
 
-    def plot_action_posteriors(self, posterior_over_actions = None):
+    def plot_action_posteriors(self, posterior_over_actions = None,
+                               fignum = None, ax = None):
         """ Stacked bar plot of the posteriors over actions at each trial.
 
         If the posteriors are provided in the input, those are plotted.
@@ -311,16 +312,25 @@ class Actinf(object):
 
         width = 0.5
         bottoms = np.zeros(nT)
-        plt.figure(1)
+        if ax is None:
+            if fignum is None:
+                plt.figure()
+            else:
+                plt.figure(fignum)
+            ax = plt.gca()
+
         for act in range(nU):
             ccolor = (act%2)*'g' + ((act+1)%2)*'y'
             plt.bar(range(1,nT+1), postA[:,act], width, bottom = bottoms,
                     color = ccolor)
+            plt.ylim([0, 1])
+            plt.xlim([1,8])
+            plt.xticks([])
             bottoms += postA[:,act]
         plt.show()
 
-    def plot_real_states(self, real_states = None,
-                         actions = None, which_real = None):
+    def plot_real_states(self, real_states = None, actions = None,
+                         which_real = None, fignum = None, ax = None):
         """ Plots the real states visited by the agent.
 
         When a which_real parameter is provided, only the physical states are
@@ -366,8 +376,13 @@ class Actinf(object):
             thres = S.max()
 
         maxy_plot = max(S.max(), self.thres)*1.2
+        if ax is None:
+            if fignum is None:
+                plt.figure()
+            else:
+                plt.figure(fignum)
+            ax = plt.gca
 
-        plt.figure()
         plt.plot(S,'+-')
         plt.plot(range(nT), np.ones(nT)*thres)
         plt.ylim([0, maxy_plot])

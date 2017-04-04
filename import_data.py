@@ -176,15 +176,51 @@ def test_past_threshold(data):
 
     return dist
 
-def plot_past_threshold(dist):
+def plot_past_threshold(dist, fignum = None, ax = None, threshold = None):
     r""" Plots histograms of the output of test_past_threshold().
+
+    Parameters
+    ----------
+    dist: dict of 1-array of float
+        Output of the function test_past_threshold() above.
+    fignum: 1-array, int (or int)
+        Figure number to plot to.
+    ax: int
+        Axes to plot to. Overrides fignum.
+    threshold: 1-array, int (or int). Default = all in data
+        Set of thresholds (indices) to plot. If an array is provided, they will
+        be plotted in a subplot array.
     """
     from matplotlib import pyplot as plt
-    for key in dist.keys():
-        plt.figure()
-        plt.title('Threshold: %d' % key)
-        plt.hist(dist[key])
-        plt.axvline(key, linewidth=3, color='r')
+    import utils
+
+    if ax is None:
+        if fignum is None:
+            fig = plt.figure()
+            fig.clf()
+        else:
+            fig = plt.figure(fignum)
+            fig.clf()
+        ax = fig.gca()
+
+
+    if threshold is None:
+        threshold = range(len(dist))
+        s1, s2 = utils.calc_subplots(len(dist))
+    elif isinstance(threshold, int):
+        s1, s2 = 1, 1
+    else:
+        s1, s2 = utils.calc_subplots(len(threshold))
+        assert len(threshold) <= len(dist), ('More thresholds provided than'+
+                                              'the data has.')
+    keys = list(dist.keys())
+    keys = [keys[t] for t in threshold]
+
+    for k,key in enumerate(keys):
+        ax = plt.subplot(s1,s2,k+1)
+        ax.hist(dist[key])
+        ax.set_title('Threshold: %d' % key)
+        ax.axvline(key, linewidth=3, color='r')
 
 def cap_states(data_flat):
     r""" Caps the number of states as 1.2 times the threshold.

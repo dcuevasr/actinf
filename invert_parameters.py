@@ -727,6 +727,7 @@ def main(data_type, mu_range, sd_range, subject = 0, threshold = None,
             for datum in data_flat:
                 target_thres = datum['TargetLevels'][threshold]
                 indices = datum['threshold']==target_thres
+                datum['TargetLevels'] = np.array((target_thres,))
                 for field in ['obs','choice','reihe', 'trial', 'threshold']:
                     datum[field] = datum[field][indices]
 
