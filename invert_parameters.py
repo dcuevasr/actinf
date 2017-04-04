@@ -628,8 +628,8 @@ def check_data_file(subjects = None, trials = None,
 #                        return False
     return bad_set
 
-def main(data_type, mu_range, sd_range, subject = 0, threshold = None,
-         games = 20, trials = None, sim_mu = None, sim_sd = None,
+def main(data_type, mu_range, sd_range, subject = 0, data_flat = None,
+         threshold = None, games = 20, trials = None, sim_mu = None, sim_sd = None,
          as_seen = None, return_results = True):
     r""" main(data_type, subject, mu_range, sd_range [, games] [, trials]
               [, return_results])
@@ -639,6 +639,11 @@ def main(data_type, mu_range, sd_range, subject = 0, threshold = None,
 
     Parameters
     ----------
+    data: dict
+        Data as produced by import_data.main(); it is assumed to be flat_data.
+        If none is provided, this function will retrieve it by using
+        import_data.py. Can be used in conjunction with all the parameters 
+        below.
     data_type: {'full', 'small','pruned', 'simulated', 'threshold'}
         Determines the type of data to be used. 'full' uses all the games and
         trials. 'small' uses the selected number of games, with all trials.
@@ -695,12 +700,13 @@ def main(data_type, mu_range, sd_range, subject = 0, threshold = None,
 
     path_to_data = None#'/home/dario/Proj_ActiveInference/Svens Data/logfiles/'
     import import_data as imda
-    data = imda.import_kolling_data(path_to_data)
-    data = imda.clean_data(data)
-    imda.enhance_data(data)
-    data_flat = imda.flatten_data(data)
-    imda.add_initial_obs(data_flat)
-
+    if data_flat is None:
+        data = imda.import_kolling_data(path_to_data)
+        data = imda.clean_data(data)
+        imda.enhance_data(data)
+        data_flat = imda.flatten_data(data)
+        imda.add_initial_obs(data_flat)
+    
     # Work (or generate) the data:
     if 'simulated' in data_type:
         if 'threshold' in data_type: #simulate data with the given thres
