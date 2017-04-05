@@ -642,7 +642,7 @@ def main(data_type, mu_range, sd_range, subject = 0, data_flat = None,
     data: dict
         Data as produced by import_data.main(); it is assumed to be flat_data.
         If none is provided, this function will retrieve it by using
-        import_data.py. Can be used in conjunction with all the parameters 
+        import_data.py. Can be used in conjunction with all the parameters
         below.
     data_type: {'full', 'small','pruned', 'simulated', 'threshold'}
         Determines the type of data to be used. 'full' uses all the games and
@@ -706,7 +706,7 @@ def main(data_type, mu_range, sd_range, subject = 0, data_flat = None,
         imda.enhance_data(data)
         data_flat = imda.flatten_data(data)
         imda.add_initial_obs(data_flat)
-    
+
     # Work (or generate) the data:
     if 'simulated' in data_type:
         if 'threshold' in data_type: #simulate data with the given thres
@@ -803,7 +803,6 @@ if __name__ == '__main__':
               % (mu_range[0], mu_range[1], sd_range[0], sd_range[1]))
         print('Trials to use: %s' % trials)
     sys.stdout.flush()
-    raise Exception
     main(data_type = ['full','pruned'], mu_range = mu_range,
          sd_range = sd_range, subject = args.subjects,
          trials = trials, return_results = False)

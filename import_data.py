@@ -245,9 +245,8 @@ def prune_trials(data_flat, trials):
     """
     import copy
     data_out = copy.deepcopy(data_flat)
-    tTot = data_out[0]['trial'].size
     for d, datum in enumerate(data_flat):
-        indices = np.zeros(tTot, dtype=bool)
+        indices = np.zeros(datum['trial'].size, dtype=bool)
         for t in trials:
             indices = indices + np.array(datum['trial']==t)
         for name in ['obs', 'threshold', 'reihe','choice','trial']:

@@ -33,7 +33,7 @@ def plot_likelihoods(likeli, fignum = 1, ax = None):
     #    plt.colorbar()
     plt.suptitle('Likelihood for all models')
 
-def risk_pressure(data):
+def risk_pressure(data, rmv_after_thres = True):
     """ Calculates the risk pressure (from Kolling_2014) for every point in
     the supplied data.
 
@@ -62,8 +62,12 @@ def risk_pressure(data):
         reihe = datum['reihe']
         state = np.round(state/10).astype(int)
         thres = np.round(thres/10).astype(int)
-        _, trial, obs, thres, reihe = rat(datum['choice'], datum['trial'],
-                                   state, thres, reihe)
+        if rmv_after_thres:
+            _, trial, obs, thres, reihe = rat(datum['choice'], datum['trial'],
+                                       state, thres, reihe)
+        else:
+            obs = state
+            trial = datum['trial']
         risk_p[d] = (abs(thres - obs))/(8 - trial)
     return risk_p
 
@@ -183,10 +187,10 @@ def plot_by_thres(subjects = None, trials = None, fignum = 4, data_flat = None):
                               subplot_spec = outer_grid[s])
         for th in range(nTL):
             ax = plt.Subplot(fig, inner_grid[th])
-            likeli, _, _, _, _, _ = invp.main(data_flat,
-                                  data_type=['threshold', 'pruned'],
+            likeli, _, _, _, _, _ = invp.main(data_type=['threshold', 'pruned'],
                                   threshold=th, mu_range=(-15,45),
                                   sd_range=(1,15), subject=subjects[s],
+                                  data_flat = data_flat,
                                   trials = trials, as_seen = as_seen,
                                   return_results=True)
 #            plot_likelihoods(likeli, None, ax)
@@ -221,26 +225,30 @@ def plot_by_thres(subjects = None, trials = None, fignum = 4, data_flat = None):
     plt.show()
 
 
-def select_by_rp(rp_min, rp_max):
+def select_by_rp(rp_lims, trials = None):
     """ Will select the obs that meet the requirement of having a so-and-so
     risk pressure.
     """
     import import_data as imda
+    import numpy as np
 
+    rp_min, rp_max = rp_lims
     _, data_flat = imda.main()
 
-    rp = risk_pressure(data_flat)
+    rp = risk_pressure(data_flat, False)
     indices = {}
-    for i,r in enumerate(rp):
-        indices[i] = r >= rp_min and r <= rp_max
-
+    for i in rp:
+        tmp1 = rp[i] >= rp_min
+        tmp2 = rp[i] <= rp_max
+        indices[i] = np.logical_and(tmp1, tmp2)
+#    raise Exception
     for d, datum in enumerate(data_flat):
         for field in ['threshold','trial','obs','reihe','choice']:
             datum[field] = datum[field][indices[d]]
 
-    plot_by_thres(trials = [6,7], data_flat = data_flat)
-    
-    
+    plot_by_thres(trials = trials, data_flat = data_flat)
+
+
 
 def select_by_random(p_value = 0.05):
     """ Will select the obs that are not significantly different from random
@@ -274,7 +282,7 @@ def select_by_precision(precision_threshold):
 
 
 
-    
+
 if __name__ == '__main__':
     import invert_parameters as invp
 
