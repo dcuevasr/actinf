@@ -32,7 +32,7 @@ def _remove_above_thres(deci, trial, state, thres, reihe, multiplier = 1.2):
 
 
 def infer_parameters(mu_range = None, sd_range = None, num_games = None,
-                     data = None, as_seen = None):
+                     data = None, as_seen = None, normalize = True):
     """ Calculates the likelihood for every model provided.
 
     Each model is created with different values of the mean and sd of a
@@ -93,7 +93,8 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
             'TargetLevels': np.array[(1)], dtype = int
                 All distinct threshold in the trial. It's equivalent to
                 np.unique(data['threshold']).
-
+    normalize: bool
+        Determines whether the likelihoods should be 'marginalized'.
 
     Returns
     -------
@@ -144,8 +145,8 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
             except (FileNotFoundError, pickle.UnpicklingError, EOFError):
                     as_seen = {}
                     print('%s file not found, or contains no valid data.' % data_file)
-    # Read the file of already-encountered observations
-    #%% Create mesh of parameter values
+
+    # Create mesh of parameter values
     if mu_range is None:
         min_mean = -10 # grid search values for thres + mu
         max_mean = 10
@@ -197,7 +198,8 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     print('Calculating posteriors over actions for all observations...',
           end='', flush = True)
     tini = time()
-    #%% Calculate data likelihood for all parameter values
+
+    # Calculate data likelihood for all parameter values
     posta_inferred = simulate_posteriors(min_mean, max_mean, min_sigma,
                                          max_sigma, as_seen,
                                          state, trial, thres,
@@ -214,14 +216,17 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     for keys in posta_inferred.keys():
         post_act[keys[0], keys[1], keys[2],:] = posta_inferred[keys][0]
 
-    #%%
     print('Calculating likelihoods...', end='', flush = True)
     tini = time()
     likelihood_model = _calculate_likelihood(deci, post_act)
     print('Took: %d seconds.' % (time() - tini))
 
     # Marginalize
-    marginal_data = likelihood_model.sum()
+    if normalize:
+        marginal_data = likelihood_model.sum()
+    else:
+        marginal_data = 1
+
     prob_data = likelihood_model/marginal_data
 
     print('The whole thing took: %d seconds.' % (time() - t_ini))
@@ -365,9 +370,7 @@ def simulate_data(num_games = 10, paradigm = None, nS = 100, thres = None,
         nT
     """
     flag_lnc = False
-    if mu + sd == 1:
-        raise ValueError('mu and sd must both be provided')
-    elif mu + sd == 2:
+    if mu is not None and sd is not None:
         flag_lnc = True
 
     mabes = bc.betMDP(nS = nS, thres = thres)
@@ -404,15 +407,16 @@ def _shift_states(states, thres, reihe, multiplier = 1.2):
         states[s] = (sta + multiplier*thres[s]*(reihe[s]-1)).astype(int)
 
 def _calculate_likelihood(deci, post_act):
-    r""" Calculates the likelihood of the data given the model in post_act."""
+    r""" Calculates the log-likelihood of the data given the model in post_act."""
 
     def likelihood(data, dist):
-        return dist[:,0]**((data==0)*1)*dist[:,1]**((data==1)*1)
+        return np.log(dist[:,0]**((data==0)*1)*dist[:,1]**((data==1)*1))
     sizes_mu_sd = post_act.shape[0:2]
     likelihood_model = np.zeros((sizes_mu_sd[0], sizes_mu_sd[1]))
     for mu, pa_mu in enumerate(post_act):
         for sd, pa_mu_sd in enumerate(pa_mu):
-            likelihood_model[mu, sd] = np.prod(likelihood(deci, pa_mu_sd))
+            likelihood_model[mu, sd] = np.sum(likelihood(deci, pa_mu_sd))
+#    raise Exception
     return likelihood_model
 
 def _save_posteriors(post_act, trial, state, thres, mu_sigma):
@@ -627,10 +631,25 @@ def check_data_file(subjects = None, trials = None,
 
 #                        return False
     return bad_set
+def _create_data_flat(mabe, deci, trial, state, thres, nD, nT):
+    """ Takes simulated data and formats it to the data_flat way of life."""
+    import numpy as np
+    nS = mabe.nS
+
+    data_flat = {}
+    data_flat['NumberGames'] = nD
+    data_flat['NumberTrials'] = nT
+    data_flat['TargetLevels'] = np.array([thres[0]*10], dtype=int)
+    data_flat['choice'] = deci
+    data_flat['obs'] = (state%nS).astype(int)*10
+    data_flat['reihe'] = np.floor(state/nS).astype(int)+1
+    data_flat['threshold'] = np.tile(mabe.thres, nD*nT)*10
+    data_flat['trial'] = trial
+    return [data_flat]
 
 def main(data_type, mu_range, sd_range, subject = 0, data_flat = None,
          threshold = None, games = 20, trials = None, sim_mu = None, sim_sd = None,
-         as_seen = None, return_results = True):
+         as_seen = None, return_results = True, normalize = True):
     r""" main(data_type, subject, mu_range, sd_range [, games] [, trials]
               [, return_results])
 
@@ -671,6 +690,10 @@ def main(data_type, mu_range, sd_range, subject = 0, data_flat = None,
         integers in the range [int, int].
     return_results: bool
         Whether to return the results to the caller (True; default) or not.
+    sim_mu: int
+        When data_type = simulated, use this value for mu.
+    sim_sd: int
+        When data_type = simulated, use this value for sd.
 
     Returns
     -------
@@ -712,12 +735,12 @@ def main(data_type, mu_range, sd_range, subject = 0, data_flat = None,
         if 'threshold' in data_type: #simulate data with the given thres
             if 'small' in data_type:
                 games = max(12, games)
-            else:
-                games = 12
-            nS = np.ceil(1.2*threshold)
+
+            nS = np.ceil(1.2*threshold).astype(int)
             mabes, deci, trial, state, thres, posta, preci, stateV, nD, nT = (
-                              simulate_data(num_games = 12, thres = threshold,
+                              simulate_data(num_games = games, thres = threshold,
                                             nS = nS, mu = sim_mu, sd = sim_sd))
+            data_flat = _create_data_flat(mabes, deci, trial, state, thres, nD, nT)
 
     else:
         if 'small' in data_type:
@@ -750,7 +773,7 @@ def main(data_type, mu_range, sd_range, subject = 0, data_flat = None,
         (post_model[s], posta[s], deci[s], trial[s], state[s], mu_sigma[s]) = (
                                   infer_parameters(mu_range = mu_range,
                                   sd_range=sd_range, data=data_flat[s],
-                                  as_seen = as_seen))
+                                  as_seen = as_seen, normalize = normalize))
     if return_results is True:
         return post_model, posta, deci, trial, state, mu_sigma
 

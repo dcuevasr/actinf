@@ -380,7 +380,7 @@ class betMDP(afc.Actinf):
 
 
     def set_prior_goals(self, selectShape='flat', rampX1 = None,
-                  Gmean = None, Gscale = None,
+                  Gmean = None, Gscale = None, Scenter = None, Sslope = None,
                   convolute = True, cutoff = True, just_return = False):
         """ Wrapper for the functions prior_goals_flat/Ramp/Unimodal.
 
@@ -396,19 +396,21 @@ class betMDP(afc.Actinf):
                                   [, Gscale] [,convolute] [,just_return])
 
         Inputs:
-        selectShape         {'flat','ramp','unimodal'} selects which shape is
-                            to be used. When selecting 'ramp', the optional
-                            input rampX1 can be selected (default 1). When
-                            using 'unimodal', Gmean and Gscale can be set to
+        selectShape         {'flat','ramp','unimodal','sigmoid'} selects which
+                            shape is to be used. When selecting 'ramp', the
+                            optional input rampX1 can be selected (default 1).
+                            When using 'unimodal', Gmean and Gscale can be set to
                             change the mean (in Trial number) and scale of the
                             Gaussian. Selecting a Gmean pre-threshold
-                            and a value for cutoff of False
-                            cause the 'hump' to be invisible and the priors
-                            will be an exponential ramp down.
+                            and a value for cutoff of False cause the 'hump' to
+                            be invisible and the priors will be an exponential
+                            ramp down. 'sigmoid' requires the two parameters
+                            for center and slope.
         rampX1              {x} determines the initial point for the ramp,
                             which uniquely determines the slope of the ramp.
         Gmean, Gscale       {x}{y} determine the mean and the scale of the
                             Gaussian for the unimodal version.
+        Scenter, Sslope     Center and slope for using when 'sigmoid' is used.
         convolute           {bool} If True, C will be calculated for the full
                             state space nS*nU, where nU is the number of action
                             pairs. If False, C will be in the nS space.
@@ -436,6 +438,12 @@ class betMDP(afc.Actinf):
             goals = self.prior_goals_unimodal(Gmean, Gscale,
                                     convolute = convolute,
                                     cutoff = cutoff, just_return = True)
+        elif selectShape == 'sigmoid':
+            if Scenter is None or Sslope is None:
+                raise ValueError('Values for Scenter and Sslope must be '+
+                                 'provided when using ''sigmoid''')
+            goals = self.prior_goals_sigmoid(Scenter, Sslope,
+                                     convolute = convolute, just_return = True)
         else:
             raise ValueError('selectShape can only be ''flat'', ''ramp'' or '+
                             '''unimodal''')
@@ -449,6 +457,21 @@ class betMDP(afc.Actinf):
         else:
             raise ValueError('Bad combination of just_return and convolute')
 
+    def prior_goals_sigmoid(self, Scenter, Sslope, convolute = True,
+                            just_return = True):
+        """ To be called from set_prior_goals()."""
+        sigmoid = lambda C,S,X: 1/(1 + np.exp(-S*(X - C)))
+        points = np.arange(self.nS)
+        goals = sigmoid(Scenter, Sslope, points)
+        if convolute:
+            goals = np.tile(goals, self.nP)
+            goals /= goals.sum()
+
+        if just_return:
+            return goals
+        else:
+            self.C = goals
+            self.lnC = np.log(goals)
 
     def prior_goals_flat(self, convolute = True, just_return = True):
         """To be called from set_prior_goals()."""
@@ -469,6 +492,7 @@ class betMDP(afc.Actinf):
             return goals
         if just_return is False and convolute is True:
             self.C = goals
+            self.lnC = np.log(goals)
         else:
             raise ValueError('Bad combination of just_return and convolute')
 
@@ -523,6 +547,7 @@ class betMDP(afc.Actinf):
             return goals
         elif just_return is False and convolute is True:
             self.C = goals
+            self.lnC = np.log(goals)
         else:
             raise ValueError('Bad combination of just_return and convolute')
 
@@ -556,6 +581,7 @@ class betMDP(afc.Actinf):
             return goals
         elif just_return is False and convolute is True:
             self.C = goals
+            self.lnC = np.log(goals)
         else:
             raise ValueError('Bad combination of just_return and convolute')
 
