@@ -40,6 +40,8 @@ import numpy as np
 import scipy as sp
 import utils
 
+np.seterr(divide = 'ignore')
+
 class Actinf(object):
     def __init__(self,MDP):
         self.A = MDP.A
@@ -77,8 +79,8 @@ class Actinf(object):
             p0 = np.exp(-16.0) # Smallest probability
         else:
             p0 = 0
-        self.A += (np.min(self.A)==0)*p0
-        self.A = sp.dot(self.A,np.diag(1/np.sum(self.A,0)))
+        #self.A += (np.min(self.A)==0)*p0
+        #self.A = sp.dot(self.A,np.diag(1/np.sum(self.A,0)))
 
         self.B += (np.min(self.B)==0)*p0
         for b in range(np.shape(self.B)[0]):
@@ -96,7 +98,7 @@ class Actinf(object):
         self.lnD = np.log(self.D)
 
         if SmallestProbability is True:
-            self.H = np.sum(self.A*self.lnA,0)
+            self.H = np.sum(self.A*np.nan_to_num(self.lnA),0)
         else:
             self.H = np.zeros(self.Ns)
 

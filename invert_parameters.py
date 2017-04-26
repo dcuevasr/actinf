@@ -251,9 +251,10 @@ def simulate_posteriors(min_mean, max_mean, min_sigma, max_sigma, as_seen,
 
 
     if wflag is True:
-        atexit.register(_save_posteriors, posta_inferred,
-                        trial, state, thres, mu_sigma)
-        signal(SIGTERM, _save_posteriors_local) # because background processes ignore SIGINT
+        pass
+#        atexit.register(_save_posteriors, posta_inferred,
+#                        trial, state, thres, mu_sigma)
+#        signal(SIGTERM, _save_posteriors_local) # because background processes ignore SIGINT
 
     T = max(trial)+1 #need this +1 since they start at 0
     def get_Vs(trial):

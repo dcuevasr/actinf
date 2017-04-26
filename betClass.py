@@ -88,7 +88,7 @@ class betMDP(afc.Actinf):
 
         self.nU = 2
 
-        self.obsnoise = 0.001 #0.0001
+        self.obsnoise = 0#0.001 #0.0001
 
         if changePairs is True:
             self.setMDPMultVar()

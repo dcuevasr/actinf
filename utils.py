@@ -43,11 +43,11 @@ class shutup:
         if out_file is not None:
             try:
                 mafi = open(out_file, 'w')
-                osfi = os.open(out_file, os.O_RDWR, os.O_CREAT)
-                self.temp_files = [osfi, osfi]
+#                osfi = os.open(out_file, os.O_RDWR, os.O_CREAT)
+#                self.temp_files = [osfi, osfi]
                 self.out_null = mafi
             except:
-                raise
+#                raise
                 out_file = None
         if out_file is None:
             self.temp_files = [os.open(os.devnull, os.O_RDWR) for x in range(2)]

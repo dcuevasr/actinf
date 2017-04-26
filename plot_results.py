@@ -136,7 +136,7 @@ def plot_all_pr(posta, mu_values, sd_values, fignum = 3):
                  ' values of $\mu$ and $\sigma$')
 
 def plot_by_thres(subjects = None, trials = None, fignum = 4, data_flat = None,
-                  priors = None):
+                  priors = None, mu_range = (-15,45), sd_range = (1,15)):
     """ Calculate and plot the likeli for the given subjects, separating the
     different thresholds into sub-subplots.
 
@@ -192,6 +192,17 @@ def plot_by_thres(subjects = None, trials = None, fignum = 4, data_flat = None,
         print('File opened; data loaded.')
     plt.set_cmap('gray_r')
 
+
+    xlen = sd_range[1] - sd_range[0]
+    xvec = np.arange(*sd_range)
+    xticks = [0, int(xlen/2), xlen]
+    xticklabels = [xvec[0], xvec[xticks[1]], xvec[-1]]
+
+    ylen = mu_range[1] - mu_range[0]
+    yvec = np.arange(*mu_range)
+    yticks = [0, int(ylen/2), ylen]
+    yticklabels = [yvec[0], yvec[yticks[1]], yvec[-1]]
+
     for s in range(nSubs):
         inner_grid = gridspec.GridSpecFromSubplotSpec(4,1,
                               subplot_spec = outer_grid[s], hspace=0.0,
@@ -202,24 +213,24 @@ def plot_by_thres(subjects = None, trials = None, fignum = 4, data_flat = None,
         for th in vTL:
             ax = plt.Subplot(fig, inner_grid[th])
             likeli, _, _, _, _, _ = invp.main(data_type=['threshold', 'pruned'],
-                                  threshold=th, mu_range=(-15,45),
-                                  sd_range=(1,15), subject=subjects[s],
+                                  threshold=th, mu_range=mu_range,
+                                  sd_range=sd_range, subject=subjects[s],
                                   data_flat = data_flat,
                                   trials = trials, as_seen = as_seen,
                                   return_results=True)
 
-            ax.imshow(likeli[subjects[s]]*priors[th], aspect=0.25,
+            ax.imshow(np.exp(likeli[subjects[s]])*priors[th], aspect=0.25,
                       interpolation='none')
 
             ax.tick_params(width=0.01)
 
             if ax.is_last_row() and ax.is_first_col():
-                ax.set_xticks([1,5,10])
+                ax.set_xticks(xticks)
                 ax.set_xlabel(r'$\sigma$')
-                ax.set_xticklabels([1,5,10], fontsize=8)
-                ax.set_yticks([0,30,60])
+                ax.set_xticklabels(xticklabels, fontsize=8)
+                ax.set_yticks(yticks)
                 ax.set_ylabel(r'$\mu$', fontsize=6)
-                ax.set_yticklabels([-15,15,45], fontsize=6)
+                ax.set_yticklabels(yticklabels, fontsize=6)
             else:
                 ax.set_yticks([])
                 ax.set_xticks([])
