@@ -217,7 +217,7 @@ def plot_by_thres(subjects = None, trials = None, fignum = 4, data_flat = None,
                                   sd_range=sd_range, subject=subjects[s],
                                   data_flat = data_flat,
                                   trials = trials, as_seen = as_seen,
-                                  return_results=True)
+                                  return_results=True, normalize = False)
 
             ax.imshow(np.exp(likeli[subjects[s]])*priors[th], aspect=0.25,
                       interpolation='none')
@@ -749,6 +749,30 @@ def calculate_enhanced_likelihoods(subjects = [0,], as_seen = None):
                 corrected_likelihood[s][m,d] = likeli[s][m,d]*max_likelihood[(mu_vec[m], sd_vec[d])][s]
     return corrected_likelihood
 
+def create_sim_data(mu = 15, sd = 4):
+    """ Creates simulated data with four conditions."""
+    import invert_parameters as invp
+    import numpy as np
+
+
+    target_levels = np.array([595, 930, 1035, 1105])
+    target_lvls = np.round(target_levels/10).astype(int)
+
+    tmp_data = {}
+    for tg in target_lvls:
+        mabes, deci, trial, state, thres, posta, preci, stateV, nD, nT = (
+                                          invp.simulate_data(num_games = 12,
+                                          nS = np.round(1.2*tg).astype(int),
+                                          mu = mu, sd = sd, thres = tg))
+        tmp_data[tg] = invp._create_data_flat(mabes, deci, trial, state, thres, nD, nT)
+
+    data_flat = tmp_data[target_lvls[0]]
+    for tg in target_lvls[1:]:
+        for name in tmp_data[tg][0].keys():
+            data_flat[0][name] = np.hstack([data_flat[0][name],tmp_data[tg][0][name]])
+    data_flat[0]['NumberGames'] = 48
+    data_flat[0]['NumberTrials'] = 8
+
 def fit_simulated_data(sd_range = (3,10), mu_range = (-15,10), threshold = 55,
                        sim_mu = 55, sim_sd = 5, fignum = 10, games = 20,
                        retorno = False, data_flat = None, as_seen = {}):
@@ -788,7 +812,8 @@ def fit_simulated_data(sd_range = (3,10), mu_range = (-15,10), threshold = 55,
         return likeli
 
 def fit_many(thres = 55, sim_mu = [0,15,-15], sim_sd = [3,4,5], games = 48,
-             retorno = False, data_flat = None, as_seen = False):
+             retorno = False, data_flat = None, as_seen = False,
+             sd_range = (3,5), mu_range = (-16,16)):
     """ Plot many of fit_simulated_data()."""
     import pickle
     import invert_parameters as invp
@@ -809,8 +834,8 @@ def fit_many(thres = 55, sim_mu = [0,15,-15], sim_sd = [3,4,5], games = 48,
     likeli = {}
     for mu in sim_mu:
         for sd in sim_sd:
-            likeli[(mu,sd)] = fit_simulated_data(sd_range = (3,5),
-                               mu_range = (-16, 16), data_flat = data_flat,
+            likeli[(mu,sd)] = fit_simulated_data(sd_range = sd_range,
+                               mu_range = mu_range, data_flat = data_flat,
                                threshold = thres, sim_mu = mu, sim_sd = sd,
                                fignum = k, games = games, retorno = retorno,
                                as_seen = as_seen)
