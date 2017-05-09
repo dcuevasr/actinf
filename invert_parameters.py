@@ -31,9 +31,9 @@ def _remove_above_thres(deci, trial, state, thres, reihe, multiplier = 1.2):
             reihe[indices])
 
 
-def infer_parameters(mu_range = None, sd_range = None, num_games = None,
-                     data = None, as_seen = None, normalize = True):
-    """ Calculates the likelihood for every model provided.
+def infer_parameters(num_games = None, data = None, as_seen = None,
+                     normalize = True, shape_pars = None):
+    r""" Calculates the likelihood for every model provided.
 
     Each model is created with different values of the mean and sd of a
     Gaussian distribution for the goals of active inference (log-priors). These
@@ -67,12 +67,17 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
 
     Parameters
     ----------
-    mu_range: (int, int)
-        Selects the range for the grid search on mu. It will search all
-        integers in the range [int, int].
-    sd_range: (int, int)
-        Selects the range for the grid search on sd. It will search all
-        integers in the range [int, int].
+    shape_pars: list
+        The list contains the information regarding the shape and parameters
+        of the priors over final states (goal) for betClass. The first element
+        must be a string accepted by betClass.set_prior_goals() describing
+        the type of shape used (e.g. 'unimodal'). The rest of the elements of
+        the list must be all the parameter values over which the grid search
+        is to be performed. The order of the parameters is that of
+        betClass.set_prior_goals(). For example, with 'unimodal', the order is
+        $\mu$, then $\sigma$, and thus shape_pars = ['unimodal', range(-15,45),
+        range(1,15)], where the grid search would be performed from -15 to 45
+        in $\mu$.
     num_games: int or tuple of ints
         Select which games to use with 'small' or 'simulated'. Defaults to all
         available games in the data, or 20 for 'simulated'.
@@ -107,6 +112,8 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     mu_sigma: np.array([nMu, nSd, 2]), dtype = int
         Values of Mu and Sigma used to build the models.
     """
+
+    import itertools as it
 
     print('Running...')
     flag_write_posta = False
@@ -146,50 +153,57 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
                     as_seen = {}
                     print('%s file not found, or contains no valid data.' % data_file)
 
-    # Create mesh of parameter values
-    if mu_range is None:
-        min_mean = -10 # grid search values for thres + mu
-        max_mean = 10
-    else:
-        min_mean, max_mean = mu_range
-        max_mean += 1 #so the input mu_range=(mu1, mu2) is inclussive.
-    if sd_range is None:
-        min_sigma = 10 # >0
-        max_sigma = 20 # Maximum value for the variance
-    else:
-        min_sigma, max_sigma = sd_range
-        max_sigma += 1
 
-    mu_size = max_mean - min_mean
-    sd_size = max_sigma - min_sigma
     tini = time()
+
+    selectShape = shape_pars[0]
+    num_pars = len(shape_pars) - 1
+
+    # for creating mu_sigma below
+    size_ms = []
+    for p in range(num_pars):
+        size_ms.append(len(shape_pars[p+1]))
+    size_ms.append(num_pars)
+
+    aux_big_index = []
+    for p in range(num_pars):
+        aux_big_index.append(range(len(shape_pars[p+1])))
+    aux_big_index.append(range(len(state)))
+    big_index = it.product(*aux_big_index)
 
     mabed = {}
     for lvl in target_levels: #one actinf for every threshold
         mabed[lvl] = bc.betMDP(nT = 8, nS = np.round(lvl*1.2).astype(int),
                                thres = int(lvl))
     print('Calculating log-priors (goals)...', end='', flush = True)
-    mu_sigma = np.zeros((mu_size, sd_size, 2))
-#    arr_lnc = np.zeros((max_mean-min_mean, max_sigma-min_sigma, len(state), mabes.Ns))
+
+    mu_sigma = np.zeros(size_ms)
+
+    par = tuple(range(num_pars))
     arr_lnc = {}
-#    return 1, 1, 1, trial, state, thres
-    for m, mu in enumerate(range(min_mean, max_mean)):
-        for sd, sigma in enumerate(range(min_sigma,max_sigma)):
-            for s in range(len(state)):
-                mu_sigma[m, sd, :] = [mu, sigma]
-                if (mu, sigma, state[s], trial[s], thres[s]) not in as_seen:
-                    flag_write_posta = True # write to file if new stuff found
-                    arr_lnc[(m, sd, s)] = np.log(mabed[thres[s]].set_prior_goals(
-                                                     selectShape='unimodal',
-                                                     Gmean = mu+thres[s],
-                                                     Gscale= sigma,
-                                                     just_return = True,
-                                                     convolute = True,
-                                                     cutoff = False)
-                                                     +np.exp(-16))
+    for index in big_index:
+        s = index[-1]
+        par = []
+        for p in range(num_pars):
+            par.append(shape_pars[p+1][index[p]])
+        mu_sigma[index[:-1]][:] = par[:]
+        current_state = par[:]
+        current_state.append(state[s])
+        current_state.append(trial[s])
+        current_state.append(thres[s])
+        current_state = tuple(current_state)
+        if current_state not in as_seen:
+            flag_write_posta = True # write to file if new stuff found
+            arr_lnc[index] = np.log(mabed[thres[s]].set_prior_goals(
+                                             selectShape=selectShape,
+                                             shape_pars = par,
+                                             just_return = True,
+                                             convolute = True,
+                                             cutoff = False)
+                                             +np.exp(-16))
+
 
     print('Took %d seconds.' % (time() - tini))
-
     # Do an atexit call in case I interrupt the python execution with ctrl+c,
     # it will save the calculations so far into the file, as it would normally
     # do when exiting:
@@ -200,8 +214,7 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     tini = time()
 
     # Calculate data likelihood for all parameter values
-    posta_inferred = simulate_posteriors(min_mean, max_mean, min_sigma,
-                                         max_sigma, as_seen,
+    posta_inferred = simulate_posteriors(as_seen, shape_pars,
                                          state, trial, thres,
                                          arr_lnc, mabed, flag_write_posta, mu_sigma)
 
@@ -210,15 +223,17 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     print('Took: %d seconds.' % (time() - tini))
     atexit.unregister(_save_posteriors)
     if flag_write_posta is True:
-        _save_posteriors(posta_inferred, trial, state, thres, mu_sigma)
-
-    post_act = np.zeros((mu_size, sd_size,NuData, 2))
+        _save_posteriors(posta_inferred, trial, state, thres, mu_sigma, aux_big_index)
+    size_pa = size_ms[:-1]
+    size_pa.append(NuData)
+    size_pa.append(2)
+    post_act = np.zeros(size_pa)
     for keys in posta_inferred.keys():
-        post_act[keys[0], keys[1], keys[2],:] = posta_inferred[keys][0]
+        post_act[keys][:] = posta_inferred[keys][0]
 
     print('Calculating likelihoods...', end='', flush = True)
     tini = time()
-    likelihood_model = _calculate_likelihood(deci, post_act)
+    likelihood_model = _calculate_likelihood(deci, post_act, aux_big_index)
     print('Took: %d seconds.' % (time() - tini))
 
     # Marginalize
@@ -234,10 +249,11 @@ def infer_parameters(mu_range = None, sd_range = None, num_games = None,
     print('Finished. Have a nice day %s\n' % smiley)
     return prob_data, post_act, deci, trial, state, mu_sigma
 
-def simulate_posteriors(min_mean, max_mean, min_sigma, max_sigma, as_seen,
+def simulate_posteriors(as_seen, shape_pars,
                         state, trial, thres, arr_lnc, mabed, wflag, mu_sigma):
     posta_inferred = {}
-    from signal import signal, SIGTERM
+#    from signal import signal, SIGTERM
+    import itertools as it
     def _save_posteriors_local(signum, frame):
         import os
         """ Wrapper to send to _save_posteriors from signal.
@@ -262,27 +278,34 @@ def simulate_posteriors(min_mean, max_mean, min_sigma, max_sigma, as_seen,
     le_V = {}
     for t in range(T):
         le_V[t] = get_Vs(t)
+    num_pars = len(shape_pars) - 1
 
-    for m, mu in enumerate(range(min_mean, max_mean)):
-        for sd, sigma in enumerate(range(min_sigma,max_sigma)):
-            for s in range(len(state)):
+    aux_big_index = []
+    for p in range(num_pars):
+        aux_big_index.append(range(len(shape_pars[p+1])))
+    aux_big_index.append(range(len(state)))
+    big_index = it.product(*aux_big_index)
+
+    for index in big_index:
+        s = index[-1]
+        par = []
+        for p in range(num_pars):
+            par.append(shape_pars[p+1][index[p]])
 #                mabed.thres = thres[s]
                 # If state>max_state, replace by max_state.
 #                obs[cstate] = 1
-                if (mu, sigma, state[s], trial[s], thres[s]) in as_seen:
-                    posta_inferred[(m, sd, s)] = as_seen[(mu, sigma, state[s], trial[s], thres[s])]
-                    assert posta_inferred[(m, sd, s)] != (), \
-                              'as_seen returned empty for mu = %d, '\
-                              'sd = %d and obs = %d, t = %d, thres = %d'\
-                              % (m, sd, state[s], trial[s], thres[s])
-                else:
-                    mabed[thres[s]].lnC = arr_lnc[(m, sd, s)]
-                    posta_inferred[(m, sd, s)] = mabed[thres[s]].posteriorOverStates(state[s],
-                               trial[s], le_V[trial[s]], mabed[thres[s]].D, 0, 15)[1:3]
-                    assert posta_inferred[(m, sd, s)] != (), \
-                              'posteriorOverStates returned empty for mu = %d, '\
-                              'sd = %d and obs = %d, t = %d, thres = %d'\
-                              % (m, sd, state[s], trial[s], thres[s])
+        current_state = par[:]
+        current_state.append(state[s])
+        current_state.append(trial[s])
+        current_state.append(thres[s])
+        current_state = tuple(current_state)
+        if current_state in as_seen:
+            posta_inferred[index] = as_seen[current_state]
+        else:
+            mabed[thres[s]].lnC = arr_lnc[index]
+            posta_inferred[index] = mabed[thres[s]].posteriorOverStates(state[s],
+                       trial[s], le_V[trial[s]], mabed[thres[s]].D, 0, 15)[1:3]
+
 
     return posta_inferred
 def call_mabe(le_input):
@@ -294,6 +317,9 @@ def call_mabe(le_input):
     return [ckey, mabe.posteriorOverStates(*le_input[2])[1:3]]
 def simulate_posteriors_par(min_mean, max_mean, min_sigma, max_sigma, as_seen,
                         state, trial, thres, arr_lnc, mabed, dummy1, dummy2):
+    raise NotImplementedError('Has not been modernized to the new format in '+
+                              'which an arbitrary number of model parameters '+
+                              'can be used.')
     class multipros(object):
         """ Methods for using with pool.eval_async below."""
         def __init__(self, posta):
@@ -337,7 +363,8 @@ def simulate_posteriors_par(min_mean, max_mean, min_sigma, max_sigma, as_seen,
 
 def simulate_data(num_games = 10, paradigm = None, nS = 100, thres = None,
                   mu = None, sd = None):
-    """ Simulates data for the kolling experiment using active inference.
+    """ Simulates data for the kolling experiment using active inference. The
+    shape of the priors is a threshold-shifted Gaussian.
 
     Parameters
     ----------
@@ -355,6 +382,7 @@ def simulate_data(num_games = 10, paradigm = None, nS = 100, thres = None,
             betClass for more info. mu should be provided as a relative value,
             with respect to the threshold. For example, for a threshold of 10,
             mu=-1 would mean that the normal is centered at 10-1 = 9.
+
 
     Returns
     -------
@@ -376,10 +404,9 @@ def simulate_data(num_games = 10, paradigm = None, nS = 100, thres = None,
 
     mabes = bc.betMDP(nS = nS, thres = thres)
     if flag_lnc:
-        mabes.set_prior_goals(selectShape='unimodal',
-                              Gmean = mu+thres, Gscale= sd,
-                              just_return = False, convolute = True,
-                              cutoff = False)
+        shape_pars = ['unimodal_s', mu, sd]
+        mabes.set_prior_goals(shape_pars = shape_pars, just_return = False,
+                              convolute = True, cutoff = False)
 
     nD = num_games  # Number of games played by subjects
     nT = mabes.nT
@@ -401,26 +428,70 @@ def simulate_data(num_games = 10, paradigm = None, nS = 100, thres = None,
         stateV[n, st] = 1
     return mabes, deci, trial, state, thres, posta, preci, stateV, nD, nT
 
+def simulate_data_4_conds(mu, sd):
+    """ Simulates data identical to the experimental data, in that there are
+    4 conditions, 12 games. The format is as the output of import_data.main().
+
+    Parameters
+    ----------
+    mu, sd: ints
+        Values to use for generating data.
+    """
+
+    import numpy as np
+
+
+    target_levels = np.array([595, 930, 1035, 1105])
+    target_lvls = np.round(target_levels/10).astype(int)
+
+    tmp_data = {}
+    for tg in target_lvls:
+        mabes, deci, trial, state, thres, posta, preci, stateV, nD, nT = (
+                                          simulate_data(num_games = 12,
+                                          nS = np.round(1.2*tg).astype(int),
+                                          mu = mu, sd = sd, thres = tg))
+        tmp_data[tg] = _create_data_flat(mabes, deci, trial, state, thres, nD, nT)
+
+    data_flat = tmp_data[target_lvls[0]]
+    for tg in target_lvls[1:]:
+        for name in tmp_data[tg][0].keys():
+            data_flat[0][name] = np.hstack([data_flat[0][name],tmp_data[tg][0][name]])
+
+    data_flat[0]['NumberGames'] = 48
+    data_flat[0]['NumberTrials'] = 8
+    return data_flat
 def _shift_states(states, thres, reihe, multiplier = 1.2):
     """ 'convolves' the states from the data with the 8 action pairs."""
 #    raise Exception
     for s, sta in enumerate(states):
         states[s] = (sta + multiplier*thres[s]*(reihe[s]-1)).astype(int)
 
-def _calculate_likelihood(deci, post_act):
-    r""" Calculates the log-likelihood of the data given the model in post_act."""
+#def _calculate_likelihood(deci, post_act):
+#    r""" Calculates the log-likelihood of the data given the model in post_act."""
+#
+#    def likelihood(data, dist):
+#        return np.log(dist[:,0]**((data==0)*1)*dist[:,1]**((data==1)*1))
+#    sizes_mu_sd = post_act.shape[0:2]
+#    likelihood_model = np.zeros((sizes_mu_sd[0], sizes_mu_sd[1]))
+#    for mu, pa_mu in enumerate(post_act):
+#        for sd, pa_mu_sd in enumerate(pa_mu):
+#            likelihood_model[mu, sd] = np.sum(likelihood(deci, pa_mu_sd))
+##    raise Exception
+#    return likelihood_model
+
+def _calculate_likelihood(deci, posta_inferred, aux_big_index):
+    "Generalization of the one above"""
+    import itertools as it
 
     def likelihood(data, dist):
         return np.log(dist[:,0]**((data==0)*1)*dist[:,1]**((data==1)*1))
-    sizes_mu_sd = post_act.shape[0:2]
-    likelihood_model = np.zeros((sizes_mu_sd[0], sizes_mu_sd[1]))
-    for mu, pa_mu in enumerate(post_act):
-        for sd, pa_mu_sd in enumerate(pa_mu):
-            likelihood_model[mu, sd] = np.sum(likelihood(deci, pa_mu_sd))
+    likelihood_model = np.zeros([len(x) for x in aux_big_index[:-1]])
+    big_index = it.product(*aux_big_index[:-1]) # no need to loop over s
+    for index in big_index:
+            likelihood_model[index] = np.sum(likelihood(deci, posta_inferred[index][:]))
 #    raise Exception
     return likelihood_model
-
-def _save_posteriors(post_act, trial, state, thres, mu_sigma):
+def _save_posteriors(post_act, trial, state, thres, mu_sigma, aux_big_index):
     """ Save the posterior over actions given the observations and other data.
     It first loads the data file again and adds to it whatever is in post_act;
     then it saves the file again with the added data.
@@ -436,6 +507,7 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma):
     """
     import pickle
     import os
+    import itertools as it
     print('Saving posteriors to file...', end=' ', flush=True)
     # read data from file
 #    in_file  = './data/posteriors.pi'
@@ -452,16 +524,14 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma):
 #    except (FileNotFoundError, pickle.UnpicklingError, EOFError):
 #        data = {}
     data = {}
-    nMu, nSd, _ = mu_sigma.shape
-    nSt = state.shape[0]
-    for m in range(nMu):
-        for s in range(nSd):
-            for st in range(nSt):
-                try: #In case the function was called by atexit with partial data
-                    data[(mu_sigma[m, s, 0], mu_sigma[m, s, 1],
-                          state[st], trial[st], thres[st])] = post_act[(m,s,st)]
-                except KeyError:
-                    pass
+    big_index = it.product(*aux_big_index)
+    for index in big_index:
+        st = index[-1]
+        try: #In case the function was called by atexit with partial data
+            data[(mu_sigma[index[:-1]][0], mu_sigma[index[:-1]][1],
+                  state[st], trial[st], thres[st])] = post_act[index]
+        except KeyError:
+            raise
     with open(out_file, 'wb') as mafi:
         pickle.dump(data, mafi)
     print('Posteriors saved.')
@@ -770,10 +840,12 @@ def main(data_type, mu_range, sd_range, subject = 0, data_flat = None,
     trial = {}
     state = {}
     mu_sigma = {}
+    shape_pars = ['unimodal_s',np.arange(mu_range[0], mu_range[1]+1),
+                  np.arange(sd_range[0], sd_range[1]+1)]
     for s in subject:
         (post_model[s], posta[s], deci[s], trial[s], state[s], mu_sigma[s]) = (
-                                  infer_parameters(mu_range = mu_range,
-                                  sd_range=sd_range, data=data_flat[s],
+                                  infer_parameters(shape_pars = shape_pars,
+                                  data=data_flat[s],
                                   as_seen = as_seen, normalize = normalize))
     if return_results is True:
         return post_model, posta, deci, trial, state, mu_sigma

@@ -39,7 +39,8 @@ import utils
 import actinfClass as afc
 class betMDP(afc.Actinf):
     def __init__(self, paradigm = 'kolling compact', changePairs = True,
-                 actionPairs = None, nS = None, nT = None, thres = None):
+                 actionPairs = None, nS = None, nT = None, thres = None,
+                 obs_sd = None):
         """
         Initializes the instance with parameter values depending on the inputs.
         See the class's help for details on optional inputs.
@@ -91,12 +92,12 @@ class betMDP(afc.Actinf):
         self.obsnoise = 0#0.001 #0.0001
 
         if changePairs is True:
-            self.setMDPMultVar()
+            self.setMDPMultVar(obs_sd = obs_sd)
         else:
-            self.setMDP(actionPairs)
+            self.setMDP(parameters = actionPairs, obs_sd = obs_sd)
 
 
-    def setMDP(self,parameters = None):
+    def setMDP(self,parameters = None, obs_sd = None):
         """ Sets the observation and transition matrices, as well as the goals,
         the priors over initial states, the real initial state and the possible
         policies to evaluate.
@@ -109,6 +110,7 @@ class betMDP(afc.Actinf):
         If the action pair is to be specified, the input 'parameter' must be
         a dict with entries risklow, riskhigh, rewlow and rewhigh.
         """
+        from scipy.stats import norm
         # checking inputs and assigning defaults if necessary
         if parameters != None:
             if not isinstance(parameters,dict):
@@ -129,10 +131,16 @@ class betMDP(afc.Actinf):
             rewlow = 1
             rewhigh = 3
 
-
+        nS = self.nS
+        nP = self.nP
         # Define the observation matrix
-        A = np.eye(self.nS) + self.obsnoise
-        A = A/sum(A)
+        if obs_sd is not None:
+            A = np.zeros((nS*nP, nS*nP))
+            for n in range(nS*nP):
+                A[:,n] = norm.pdf(np.arange(nS*nP), n, obs_sd)
+        else:
+            A = np.eye(self.nS) + self.obsnoise
+            A = A/sum(A, axis=0)
 
         # Define transition matrices
         B = np.zeros((self.nU,self.nS,self.nS))
@@ -177,7 +185,7 @@ class betMDP(afc.Actinf):
 
 #        self.H = np.zeros(self.H.shape)
 
-    def setMDPMultVar(self,parameters=None):
+    def setMDPMultVar(self,parameters=None, obs_sd = None):
         """Sets the observation and transition matrices, as well as the goals,
         the priors over initial states, the real initial state and the possible
         policies to evaluate.
@@ -192,6 +200,7 @@ class betMDP(afc.Actinf):
         setActionPairs(). Otherwise, they must be provided in a dict with
         keys pL, pH, rL, rH, which must be numpy arrays of the same length.
         """
+        from scipy.stats import norm
         # Working parameters. To be imported later
         nU = self.nU
         nS = self.nS
@@ -218,7 +227,12 @@ class betMDP(afc.Actinf):
             nP = self.nP
 
         # Define observation matrix
-        A = np.eye(nS*nP) + obsnoise/nP
+        if obs_sd is not None:
+            A = np.zeros((nS*nP, nS*nP))
+            for n in range(nS*nP):
+                A[:,n] = norm.pdf(np.arange(nS*nP), n, obs_sd)
+        else:
+            A = np.eye(nS*nP) + obsnoise/nP
         # Transition matrices
         # num2coords = np.unravel_index
         # coords2num = np.ravel_multi_index
@@ -379,8 +393,7 @@ class betMDP(afc.Actinf):
         return B
 
 
-    def set_prior_goals(self, selectShape='flat', rampX1 = None,
-                  Gmean = None, Gscale = None, Scenter = None, Sslope = None,
+    def set_prior_goals(self, selectShape='flat', shape_pars = None,
                   convolute = True, cutoff = True, just_return = False):
         """ Wrapper for the functions prior_goals_flat/Ramp/Unimodal.
 
@@ -396,21 +409,26 @@ class betMDP(afc.Actinf):
                                   [, Gscale] [,convolute] [,just_return])
 
         Inputs:
-        selectShape         {'flat','ramp','unimodal','sigmoid'} selects which
-                            shape is to be used. When selecting 'ramp', the
-                            optional input rampX1 can be selected (default 1).
-                            When using 'unimodal', Gmean and Gscale can be set to
-                            change the mean (in Trial number) and scale of the
-                            Gaussian. Selecting a Gmean pre-threshold
-                            and a value for cutoff of False cause the 'hump' to
-                            be invisible and the priors will be an exponential
-                            ramp down. 'sigmoid' requires the two parameters
-                            for center and slope.
-        rampX1              {x} determines the initial point for the ramp,
-                            which uniquely determines the slope of the ramp.
-        Gmean, Gscale       {x}{y} determine the mean and the scale of the
-                            Gaussian for the unimodal version.
-        Scenter, Sslope     Center and slope for using when 'sigmoid' is used.
+        selectShape         {'flat','ramp','unimodal','unimodal_s','sigmoid'}
+                            selects which shape is to be used. When selecting
+                            'ramp', the optional input rampX1 can be selected
+                            (default 1). When using 'unimodal', Gmean and
+                            Gscale can be set to change the mean (in Trial
+                            number) and scale of the Gaussian In unimodal_s, mu
+                            is changed to threshold+mu. Selecting a Gmean
+                            pre-threshold and a value for cutoff of False cause
+                            the 'hump' to be invisible and the priors will be
+                            an exponential ramp down. 'sigmoid' requires the
+                            two parameters for center and slope.
+        shape_pars          Tuple with the parameters required for the shape
+                            selected. They are:
+            rampX1              {x} determines the initial point for the ramp,
+                                which uniquely determines the slope of the ramp.
+            Gmean, Gscale       {x}{y} determine the mean and the scale of the
+                                Gaussian for the unimodal and unimodal_s
+                                versions. In case of unimodal_s, the value of
+                                Gmean is shifted to threshold+mu.
+            Scenter, Sslope     Center and slope for using when 'sigmoid' is used.
         convolute           {bool} If True, C will be calculated for the full
                             state space nS*nU, where nU is the number of action
                             pairs. If False, C will be in the nS space.
@@ -426,27 +444,34 @@ class betMDP(afc.Actinf):
         if selectShape == 'flat':
             goals = self.prior_goals_flat(convolute, just_return = True)
         elif selectShape == 'ramp':
-            if rampX1 is None:
-                raise ValueError('A value for rampX1 must be provided when using'+
-                                ' ''ramp''')
+            rampX1 = shape_pars[0]
+#                raise ValueError('A value for rampX1 must be provided when using'+
+#                                ' ''ramp''')
             goals = self.prior_goals_ramp(rampX1 = rampX1,
                                    convolute = convolute, just_return = True)
         elif selectShape == 'unimodal':
-            if Gscale is None or Gmean is None:
-                raise ValueError('Values for Gmean and Gscale must be provided '+
-                                 'when using ''unimodal''')
+            Gmean, Gscale = shape_pars
+#                raise ValueError('Values for Gmean and Gscale must be provided '+
+#                                 'when using ''unimodal''')
+            goals = self.prior_goals_unimodal(Gmean, Gscale,
+                                    convolute = convolute,
+                                    cutoff = cutoff, just_return = True)
+
+        elif selectShape == 'unimodal_s':
+            Gmean, Gscale = shape_pars
+            Gmean += self.thres
             goals = self.prior_goals_unimodal(Gmean, Gscale,
                                     convolute = convolute,
                                     cutoff = cutoff, just_return = True)
         elif selectShape == 'sigmoid':
-            if Scenter is None or Sslope is None:
-                raise ValueError('Values for Scenter and Sslope must be '+
-                                 'provided when using ''sigmoid''')
+            Scenter, Sslope = shape_pars
+#                raise ValueError('Values for Scenter and Sslope must be '+
+#                                 'provided when using ''sigmoid''')
             goals = self.prior_goals_sigmoid(Scenter, Sslope,
                                      convolute = convolute, just_return = True)
         else:
-            raise ValueError('selectShape can only be ''flat'', ''ramp'' or '+
-                            '''unimodal''')
+            raise ValueError('selectShape can only be ''flat'', ''ramp'', '+
+                            '''unimodal'', ''unimodal_s'' or ''sigmoid''')
         if just_return is True:
             return goals
         elif just_return is False and convolute is True:

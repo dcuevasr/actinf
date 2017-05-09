@@ -843,3 +843,135 @@ def fit_many(thres = 55, sim_mu = [0,15,-15], sim_sd = [3,4,5], games = 48,
     invp.concatenate_data(old_files = 'delete')
     if retorno:
         return likeli
+
+def plot_final_states(data, fignum = 11):
+    """ Bar plot of how many times states were visited in the data."""
+    import numpy as np
+    from matplotlib import pyplot as plt
+    from matplotlib import gridspec
+    import utils
+
+    if not isinstance(data, list):
+        data = [data]
+    nSubs = len(data)
+
+    nObs = len(data[0]['trial'])
+    target_levels = data[0]['TargetLevels']
+
+    max_S = 0
+    for datum in data:
+        max_S = max(max_S,datum['obs'].max())
+
+    count = {}
+    for tl in target_levels:
+        count[tl] = np.zeros(max_S+1)
+
+
+    for datum in data:
+        for ob in range(nObs):
+            cobs = datum['obs'][ob]
+            cthr = datum['threshold'][ob]
+            count[cthr][cobs] += 1
+    fig = plt.figure(fignum)
+    plt.clf()
+    s2, s1 = utils.calc_subplots(nSubs)
+    outer_grid = gridspec.GridSpec(s1,s2)
+
+    for s in range(nSubs):
+        inner_grid = gridspec.GridSpecFromSubplotSpec(4,1,
+                              subplot_spec = outer_grid[s], hspace=0.0,
+                              wspace=0)
+        for th in range(len(target_levels)):
+            ax = plt.Subplot(fig, inner_grid[th])
+            thres = target_levels[th]
+
+    #        ax.bar(np.arange(max_S+1),count[target_levels[th]])
+            ax.hist(data[0]['obs'][data[0]['threshold']==thres],20, color = (105/256,141/256,198/256))
+            ax.plot([thres, thres], [0, 20], linewidth = 3, color = 'g')
+            ax.plot([thres-150, thres-150], [0,20], color = 'g')
+            ax.plot([thres+150, thres+150], [0,20], color = 'g')
+
+            xticks = range(0,1400,100)
+            xticklabels = range(0,140,10)
+
+            yticks = range(0,20,5)
+            yticklabels = yticks
+
+            ax.set_xlim([0,1400])
+
+            if ax.is_last_row() and ax.is_first_col():
+                ax.set_xticks(xticks)
+                ax.set_xlabel(r'Points')
+                ax.set_xticklabels(xticklabels, fontsize=8)
+                ax.set_yticks(yticks)
+                ax.set_ylabel(r'Count', fontsize=6)
+                ax.set_yticklabels(yticklabels, fontsize=6)
+                ax.tick_params(width=0.0)
+
+            else:
+                ax.set_yticks([])
+                ax.set_xticks([])
+                ax.set_ylabel('Th=%d' % (thres/10))
+            if ax.is_first_row():
+                ax.set_title('Histogram of visited states in data')
+            else:
+                ax.set_title('')
+
+            fig.add_subplot(ax)
+
+def plot_evolution_gamma(mu = None, sd = None, num_games = 10,
+                         fignum = 12, return_dict = False):
+    """ Simulates the data set's observations with different parameter values
+    to see whether precision evolves significantly differently for different
+    priors. I suspect not.
+
+    """
+
+    import invert_parameters as invp
+    from matplotlib import pyplot as plt
+
+
+    mabe, deci, trial, state, thres, posta, preci, stateV, nD, nT = (
+                  invp.simulate_data(nS = 72, thres = 60, mu = mu, sd = sd))
+#    data_flat = invp._create_data_flat(mabe, deci, trial, state, thres, nD, nT)
+#
+#    for field in ['choice', 'reihe','obs','threshold','trial']:
+#        data_flat[0][field] = np.reshape(data_flat[0][field],(-1,nT))
+#    data = data_flat # Since it is not flat anymore
+
+    deci = np.reshape(deci, (-1,nT))
+    state = np.reshape(state, (-1,nT))
+
+    mu_vec = np.arange(-15,30+1)
+    sd_vec = np.arange(1,15+1)
+    mu_size = len(mu_vec)
+    sd_size = len(sd_vec)
+    try:
+        nGames = data_flat[0]['choice'].shape[0]
+    except:
+        nGames = deci.shape[0]
+
+    results = {}
+    fig = plt.figure(fignum)
+    for m,mu in enumerate(mu_vec):
+        for sd,sigma in enumerate(sd_vec):
+            for g in range(nGames):
+                shape_pars = [mu, sigma]
+                mabe.set_prior_goals(selectShape = 'unimodal_s',
+                                     shape_pars=shape_pars)
+                results[(mu,sigma,g)] = mabe.full_inference(sta_f = state[g],
+                        act_f = deci[g], just_return = True)
+                plt.subplot(mu_size,sd_size,m*sd_size + sd +1)
+                plt.plot(results[(mu,sigma,g)]['Precision'])
+
+    all_axes = fig.get_axes()
+    for x,ax in enumerate(all_axes):
+        ax.set_yticks([])
+        ax.set_xticks([])
+        if ax.is_first_row():
+            ax.set_title('%s' % sd_vec[x])
+        if ax.is_first_col():
+            ax.set_ylabel('%s' % mu_vec[ax.rowNum], fontsize=8)
+
+    if return_dict is True:
+        return results

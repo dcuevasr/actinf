@@ -295,6 +295,145 @@ class Actinf(object):
 
 #        print 'See the Example dictionary for the results\n'
 
+    def full_inference(self, obs_f = None, act_f = None, V_f = None,
+                       sta_f = None, preupd = False, just_return = False):
+        """ Performs active inference over all trials for one game, as defined
+        in the particular sub-class in use (e.g. betClass).
+
+        The observations, choices and available policies can be forced by
+        setting the appropriate inputs.
+
+        The resulting Observations, States, inferred states, taken Actions and
+        the posterior distribution over actions at each trial are saved in the
+        dictionary Example or just returned.
+
+        Parameters
+        ----------
+        obs/act/sta/_f: arrays, size = {nT,}
+            Numpy arrays (can also be lists or any indexable array) which
+            contain the forced observations/actions/states for a full game. If
+            not provided, they will be calculated.
+        V_f: array, size = {nT,-1}
+            Action sequences to consider for active inference. If none provided,
+            defaults to self.V.
+        preupd: bool
+            If True, the precision updates are saved and returned. If False,
+            only the final value for each trial.
+        just_return: bool
+            If True, the dictionary Example, with all the results, is returned.
+            If False, it is written to self.Example.
+
+        Returns
+        -------
+        Dictionary with the following keys:
+        Obs: numpy array, size = {nT}
+            Observations by the agent.
+        RealStates: numpy array, size = {nT,}
+            Actual states visited by the agent.
+        InfStates: numpy array, size = {nT,}
+            States inferred by the agent.
+        Precision, numpy array, size = {nT,}
+            Final value of Precision at every trial.
+        PostActions: numpy array, size = {nT, nA}
+            Posteriors over actions for each trial
+        Actions: numpy array, size = {nT,}
+            Action taken by the agent at every trial.
+        PrecisionUpdates: list, size = {nT*4,}
+            Precision updates at every trial. The 4 comes from the fact that
+            the inference over actions is iterated 4 times at each trial.
+        xt: int
+            Execution time for this game.
+
+        """
+
+        from time import time
+
+        t1 = time()
+        # Check that the class has been fully initiated with a task:
+        if hasattr(self, 'lnA') is False:
+            raise Exception('NotInitiated: The class has not been initiated'+
+                            ' with a task')
+        if V_f is not None:
+            wV = V_f
+        else:
+            wV = self.V
+
+        T = wV.shape[1]
+
+        if obs_f is None:
+            obs = np.zeros(T, dtype=int)    # Observations at time t
+        else:
+            obs = obs_f
+
+        if act_f is None:
+            act = np.zeros(T, dtype=int)    # Actions at time t
+        else:
+            act = act_f
+
+        if sta_f is None:
+            sta = np.zeros(T, dtype=int)    # Real states at time t
+        else:
+            sta = sta_f
+
+        bel = np.zeros((T,self.Ns))      # Inferred states at time t
+        P   = np.zeros((T, self.Nu))
+        W   = np.zeros(T)
+        # Matrices for diagnostic purposes. If deleted, also deleted the
+        # corresponding ones in posteriorOverStates:
+        self.oQ = []
+        self.oV = []
+        self.oH = []
+
+        sta[0] = np.nonzero(self.S)[0][0]
+        # Some dummy initial values:
+        PosteriorLastState = self.D
+        PastAction = 1
+        PriorPrecision = self.gamma
+        Pupd = []
+        for t in range(T-1):
+            # Sample an observation from current state
+            if obs_f is None:
+                obs[t] = self.sampleNextObservation(sta[t])
+            # Update beliefs over current state and posterior over actions
+            # and precision
+            bel[t,:], P[t,:], Gamma = self.posteriorOverStates(obs[t], t, wV,
+                                                    PosteriorLastState,
+                                                    PastAction,
+                                                    PriorPrecision,
+                                                    PreUpd = preupd)
+            if preupd is True:
+                W[t] = Gamma[-1]
+                Pupd.append(Gamma)
+            else:
+                W[t] = Gamma
+            # Sample an action and the next state using posteriors
+            act_tmp, sta_tmp = self.sampleNextState( sta[t], P[t,:])
+            if act_f is None:
+                act[t] = act_tmp
+            if sta_f is None:
+                sta[t+1] = sta_tmp
+            # Remove from pool all policies that don't have the selected action
+            tempV = []
+            for seq in wV:
+                if seq[t] == act[t]:
+                    tempV.append(seq)
+            wV = np.array(tempV, dtype = int)
+            # Prepare inputs for next iteration
+            PosteriorLastState = bel[t]
+            PastAction = act[t]
+            PriorPrecision = W[t]
+        xt = time() - t1
+        Example = {'Obs':obs, 'RealStates':sta, 'InfStates':bel,
+                            'Precision':W, 'PostActions':P, 'Actions':act,
+                            'xt':xt}
+        if preupd is True:
+            Example['PrecisionUpdates'] = np.array(Pupd)
+        if just_return is True:
+            return Example
+        else:
+            self.Example = Example
+
+
     def plot_action_posteriors(self, posterior_over_actions = None,
                                fignum = None, ax = None):
         """ Stacked bar plot of the posteriors over actions at each trial.
