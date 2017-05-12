@@ -135,8 +135,8 @@ def plot_all_pr(posta, mu_values, sd_values, fignum = 3):
     plt.suptitle(r'Actinf''s posterior probability of risky for different'+
                  ' values of $\mu$ and $\sigma$')
 
-def plot_by_thres(subjects = None, trials = None, fignum = 4, data_flat = None,
-                  priors = None, mu_range = (-15,45), sd_range = (1,15)):
+def plot_by_thres(shape_pars = None, subjects = None, trials = None, fignum = 4,
+                  data_flat = None, priors = None, as_seen = None):
     """ Calculate and plot the likeli for the given subjects, separating the
     different thresholds into sub-subplots.
 
@@ -166,6 +166,9 @@ def plot_by_thres(subjects = None, trials = None, fignum = 4, data_flat = None,
     import numpy as np
     import import_data as imda
 
+    if shape_pars is None:
+        shape_pars = ['unimodal_s', range(-15,45+1), range(1, 15+1)]
+
     if data_flat is None:
         _, data_flat = imda.main()
         if subjects is None:
@@ -186,20 +189,24 @@ def plot_by_thres(subjects = None, trials = None, fignum = 4, data_flat = None,
     fig = plt.figure(fignum)
     fig.clf()
     outer_grid = gridspec.GridSpec(s1,s2)
-    data_file = './data/posteriors.pi'
-    with open(data_file, 'rb') as mafi:
-        as_seen = pickle.load(mafi)
-        print('File opened; data loaded.')
+    if as_seen is None:
+        data_file = './data/posteriors.pi'
+        with open(data_file, 'rb') as mafi:
+            as_seen = pickle.load(mafi)
+            print('File opened; data loaded.')
     plt.set_cmap('gray_r')
 
-
-    xlen = sd_range[1] - sd_range[0]
-    xvec = np.arange(*sd_range)
+    xlen = shape_pars[2].size
+    xvec = shape_pars[2]
+#    xlen = sd_range[1] - sd_range[0]
+#    xvec = np.arange(*sd_range)
     xticks = [0, int(xlen/2), xlen]
     xticklabels = [xvec[0], xvec[xticks[1]], xvec[-1]]
 
-    ylen = mu_range[1] - mu_range[0]
-    yvec = np.arange(*mu_range)
+    ylen = shape_pars[1].size
+    yvec = shape_pars[1]
+#    ylen = mu_range[1] - mu_range[0]
+#    yvec = np.arange(*mu_range)
     yticks = [0, int(ylen/2), ylen]
     yticklabels = [yvec[0], yvec[yticks[1]], yvec[-1]]
 
@@ -213,8 +220,8 @@ def plot_by_thres(subjects = None, trials = None, fignum = 4, data_flat = None,
         for th in vTL:
             ax = plt.Subplot(fig, inner_grid[th])
             likeli, _, _, _, _, _ = invp.main(data_type=['threshold', 'pruned'],
-                                  threshold=th, mu_range=mu_range,
-                                  sd_range=sd_range, subject=subjects[s],
+                                  threshold=th, shape_pars = shape_pars,
+                                  subject=subjects[s],
                                   data_flat = data_flat,
                                   trials = trials, as_seen = as_seen,
                                   return_results=True, normalize = False)
@@ -749,7 +756,7 @@ def calculate_enhanced_likelihoods(subjects = [0,], as_seen = None):
                 corrected_likelihood[s][m,d] = likeli[s][m,d]*max_likelihood[(mu_vec[m], sd_vec[d])][s]
     return corrected_likelihood
 
-def create_sim_data(mu = 15, sd = 4):
+def create_sim_data(shape_pars):
     """ Creates simulated data with four conditions."""
     import invert_parameters as invp
     import numpy as np
@@ -761,9 +768,10 @@ def create_sim_data(mu = 15, sd = 4):
     tmp_data = {}
     for tg in target_lvls:
         mabes, deci, trial, state, thres, posta, preci, stateV, nD, nT = (
-                                          invp.simulate_data(num_games = 12,
+                                          invp.simulate_data(shape_pars,
+                                          num_games = 12,
                                           nS = np.round(1.2*tg).astype(int),
-                                          mu = mu, sd = sd, thres = tg))
+                                          thres = tg))
         tmp_data[tg] = invp._create_data_flat(mabes, deci, trial, state, thres, nD, nT)
 
     data_flat = tmp_data[target_lvls[0]]
@@ -772,6 +780,7 @@ def create_sim_data(mu = 15, sd = 4):
             data_flat[0][name] = np.hstack([data_flat[0][name],tmp_data[tg][0][name]])
     data_flat[0]['NumberGames'] = 48
     data_flat[0]['NumberTrials'] = 8
+    return data_flat
 
 def fit_simulated_data(sd_range = (3,10), mu_range = (-15,10), threshold = 55,
                        sim_mu = 55, sim_sd = 5, fignum = 10, games = 20,
@@ -886,7 +895,7 @@ def plot_final_states(data, fignum = 11):
             thres = target_levels[th]
 
     #        ax.bar(np.arange(max_S+1),count[target_levels[th]])
-            ax.hist(data[0]['obs'][data[0]['threshold']==thres],20, color = (105/256,141/256,198/256))
+            ax.hist(data[s]['obs'][data[s]['threshold']==thres],20, color = (105/256,141/256,198/256))
             ax.plot([thres, thres], [0, 20], linewidth = 3, color = 'g')
             ax.plot([thres-150, thres-150], [0,20], color = 'g')
             ax.plot([thres+150, thres+150], [0,20], color = 'g')
@@ -923,7 +932,7 @@ def plot_evolution_gamma(mu = None, sd = None, num_games = 10,
                          fignum = 12, return_dict = False):
     """ Simulates the data set's observations with different parameter values
     to see whether precision evolves significantly differently for different
-    priors. I suspect not.
+    priors.
 
     """
 
@@ -975,3 +984,92 @@ def plot_evolution_gamma(mu = None, sd = None, num_games = 10,
 
     if return_dict is True:
         return results
+
+def plot_lnc(mu_vec = None, sd_vec = None, fignum = 13):
+    """ Plots an array of exp(lnC) for the values of mu and sd provided."""
+    from matplotlib import pyplot as plt
+    import betClass as bc
+    import numpy as np
+    from matplotlib import gridspec as gs
+
+
+    target_levels = [60,93,104,110]
+    mabes = {}
+    for tl in target_levels:
+        mabes[tl] = bc.betMDP(nS = np.round(tl*1.2).astype(int), thres = tl)
+#    mabes = bc.betMDP()
+    fig = plt.figure(fignum)
+    fig.clf()
+    if mu_vec is None:
+        mu_vec = np.arange(-15,45+1)
+    if sd_vec is None:
+        sd_vec = np.arange(1,15+1)
+    outer_grid = gs.GridSpec(len(mu_vec), len(sd_vec))
+    for m, mu in enumerate(mu_vec):
+        for sd, sigma in enumerate(sd_vec):
+            for l,tl in enumerate(target_levels):
+                inner_grid = gs.GridSpecFromSubplotSpec(4,1,
+                                          subplot_spec = outer_grid[m,sd],
+                                          hspace = 0, wspace = 0)
+                shape_pars = [mu, sigma]
+                clnC = mabes[tl].set_prior_goals(selectShape = 'unimodal_s',
+                                            shape_pars = shape_pars,
+                                            just_return=True,
+                                            cutoff = False, convolute = False)
+                ax = plt.Subplot(fig, inner_grid[l])
+                ax.fill_between([0,mabes[tl].nS],[0,0],[clnC.max(), clnC.max()], color=(0.9, 0.9, 0.9))
+
+                ax.plot(clnC, color=(0.2,0.5,0.2))
+#                ax.set_ylabel('%s' % tl, rotation=0, ha = 'right')
+                ax.set_yticks([])
+                ax.set_xlim([0,140])
+                ax.plot([tl, tl],[0, clnC.max()], color=(0.7,0.3,0.3), linewidth=2)
+                if not ax.is_last_row():
+                    ax.set_xticks([])
+                if sd == 0 and ax.is_first_row():
+                    ax.set_ylabel(r'$\mu = $%s' % mu, rotation=0, ha='right')
+                if m == 0 and ax.is_first_row():
+                    ax.set_title(r'$\sigma = $%s' % sigma)
+                fig.add_subplot(ax)
+
+def plot_performance(shape_pars, nGames = 10, fignum = 14):
+    """ Plots a matrix containing the performance of the model for all the
+    parameter values contained in shape_pars
+    """
+
+    import invert_parameters as invp
+    from matplotlib import pyplot as plt
+    import itertools as it
+    import betClass as bc
+
+    mabe = bc.betMDP(nS = 72, thres = 60)
+#
+#    mabe, deci, trial, state, thres, posta, preci, stateV, nD, nT = (
+#                  invp.simulate_data(num_games = nGames, nS = 72, thres = 60))
+#
+#    deci = np.reshape(deci, (-1,nT))
+#    state = np.reshape(state, (-1,nT))
+
+#    nGames = deci.shape[0]
+    sizes_pars = tuple([len(x) for x in shape_pars[1:]])
+    big_index = it.product(*shape_pars[1:])
+    results = {}
+    fig = plt.figure(fignum)
+    success = np.zeros(sizes_pars)
+    for i,index in enumerate(big_index):
+        for g in range(nGames):
+            shape_pars_it = index
+            mabe.set_prior_goals(selectShape = 'unimodal_s',
+                                 shape_pars=shape_pars_it)
+            tmp = list(index)
+            tmp.append(g)
+            results_index = tuple(tmp)
+            results[results_index] = mabe.full_inference(just_return = True)
+#            print('Final state', results[results_index]['RealStates'][-1]%72)
+            if results[results_index]['RealStates'][-1]%72 >= mabe.thres:
+#                print('Index:',i, index)
+                success[np.unravel_index(i,sizes_pars)] += 1
+#                raise Exception
+    plt.imshow(success, interpolation='none')
+    plt.set_cmap('gray_r')
+#    return results, success

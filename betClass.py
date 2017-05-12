@@ -469,6 +469,13 @@ class betMDP(afc.Actinf):
 #                                 'provided when using ''sigmoid''')
             goals = self.prior_goals_sigmoid(Scenter, Sslope,
                                      convolute = convolute, just_return = True)
+        elif selectShape == 'sigmoid_s':
+            Scenter, Sslope = shape_pars
+            Scenter += self.thres
+#                raise ValueError('Values for Scenter and Sslope must be '+
+#                                 'provided when using ''sigmoid''')
+            goals = self.prior_goals_sigmoid(Scenter, Sslope,
+                                     convolute = convolute, just_return = True)
         else:
             raise ValueError('selectShape can only be ''flat'', ''ramp'', '+
                             '''unimodal'', ''unimodal_s'' or ''sigmoid''')

@@ -123,8 +123,7 @@ def infer_parameters(num_games = None, data = None, as_seen = None,
     if data is None:
         (mabes, deci, trial, state, thres, posta,
          preci, stateV, nD, nT) = simulate_data(num_games)
-#        max_state = mabes.nS
-#        Ns = mabes.Ns
+
         if as_seen is None:
             as_seen = {}
         flag_write_posta = False #Don't write to file if simulated data
@@ -137,12 +136,11 @@ def infer_parameters(num_games = None, data = None, as_seen = None,
         deci, trial, state, thres, reihe = _remove_above_thres(deci, trial,
                                                         state, thres, reihe)
         target_levels = np.round(data['TargetLevels']/10)
-#        return 1, 1, 1, trial, state, thres
 
         _shift_states(state, thres, reihe)
-#        nD = data['NumberGames']
-#        nT = data['NumberTrials']
+
         NuData = thres.size
+
         if as_seen is None:
             data_file = './data/posteriors.pi'
             try:
@@ -204,9 +202,7 @@ def infer_parameters(num_games = None, data = None, as_seen = None,
 
 
     print('Took %d seconds.' % (time() - tini))
-    # Do an atexit call in case I interrupt the python execution with ctrl+c,
-    # it will save the calculations so far into the file, as it would normally
-    # do when exiting:
+
 
 
     print('Calculating posteriors over actions for all observations...',
@@ -265,7 +261,9 @@ def simulate_posteriors(as_seen, shape_pars,
         _save_posteriors(posta_inferred, trial, state, thres, mu_sigma)
         os._exit(0)
 
-
+    # Do an atexit call in case I interrupt the python execution with ctrl+c,
+    # it will save the calculations so far into the file, as it would normally
+    # do when exiting:
     if wflag is True:
         pass
 #        atexit.register(_save_posteriors, posta_inferred,
@@ -291,9 +289,7 @@ def simulate_posteriors(as_seen, shape_pars,
         par = []
         for p in range(num_pars):
             par.append(shape_pars[p+1][index[p]])
-#                mabed.thres = thres[s]
-                # If state>max_state, replace by max_state.
-#                obs[cstate] = 1
+
         current_state = par[:]
         current_state.append(state[s])
         current_state.append(trial[s])
@@ -338,9 +334,7 @@ def simulate_posteriors_par(min_mean, max_mean, min_sigma, max_sigma, as_seen,
     for m, mu in enumerate(range(min_mean, max_mean)):
         for sd, sigma in enumerate(range(min_sigma,max_sigma)):
             for s in range(len(state)):
-#                mabed.thres = thres[s]
-                # If state>max_state, replace by max_state.
-#                obs[cstate] = 1
+
                 if (mu, sigma, state[s], trial[s], thres[s]) in as_seen:
                     posta_inferred[(m, sd, s)] = as_seen[(mu, sigma, state[s], trial[s], thres[s])]
                 else:
@@ -349,7 +343,6 @@ def simulate_posteriors_par(min_mean, max_mean, min_sigma, max_sigma, as_seen,
         res = []
         for nums in to_do:
             m, sd, s, mu, sigma = nums
-#            print(type(m), type(sd), type(s), type(thres), flush=True)
             mabed[thres[s]].lnC = arr_lnc[(m, sd, s)]
             le_input = [mabed[thres[s]], (m, sd, s), [state[s], trial[s], mabed[thres[s]].V,
                         mabed[thres[s]].D, 0, 15]]
@@ -361,8 +354,8 @@ def simulate_posteriors_par(min_mean, max_mean, min_sigma, max_sigma, as_seen,
     posta_inferred.update(mamu.posta)
     return posta_inferred
 
-def simulate_data(num_games = 10, paradigm = None, nS = 100, thres = None,
-                  mu = None, sd = None):
+def simulate_data(shape_pars = None, num_games = 10, paradigm = None, nS = 100,
+                  thres = None):
     """ Simulates data for the kolling experiment using active inference. The
     shape of the priors is a threshold-shifted Gaussian.
 
@@ -376,12 +369,9 @@ def simulate_data(num_games = 10, paradigm = None, nS = 100, thres = None,
             Threshold to use when calculating lnC for the agent
         nS: int
             Number of total (non-convoluted) states.
-        mu, sd: int
-            Hyperparameters for calculating lnC. When provided, the base
-            lnC is overwritten by a normal with the given parameters. See
-            betClass for more info. mu should be provided as a relative value,
-            with respect to the threshold. For example, for a threshold of 10,
-            mu=-1 would mean that the normal is centered at 10-1 = 9.
+        shape_pars: list
+            Contains, in this order, the goal shape (e.g. 'unimodal'), the
+            value of parameter 1, the value of parameter 2, etc.
 
 
     Returns
@@ -398,13 +388,9 @@ def simulate_data(num_games = 10, paradigm = None, nS = 100, thres = None,
         nD
         nT
     """
-    flag_lnc = False
-    if mu is not None and sd is not None:
-        flag_lnc = True
 
     mabes = bc.betMDP(nS = nS, thres = thres)
-    if flag_lnc:
-        shape_pars = ['unimodal_s', mu, sd]
+    if shape_pars is not None:
         mabes.set_prior_goals(shape_pars = shape_pars, just_return = False,
                               convolute = True, cutoff = False)
 
@@ -462,22 +448,8 @@ def simulate_data_4_conds(mu, sd):
     return data_flat
 def _shift_states(states, thres, reihe, multiplier = 1.2):
     """ 'convolves' the states from the data with the 8 action pairs."""
-#    raise Exception
     for s, sta in enumerate(states):
         states[s] = (sta + multiplier*thres[s]*(reihe[s]-1)).astype(int)
-
-#def _calculate_likelihood(deci, post_act):
-#    r""" Calculates the log-likelihood of the data given the model in post_act."""
-#
-#    def likelihood(data, dist):
-#        return np.log(dist[:,0]**((data==0)*1)*dist[:,1]**((data==1)*1))
-#    sizes_mu_sd = post_act.shape[0:2]
-#    likelihood_model = np.zeros((sizes_mu_sd[0], sizes_mu_sd[1]))
-#    for mu, pa_mu in enumerate(post_act):
-#        for sd, pa_mu_sd in enumerate(pa_mu):
-#            likelihood_model[mu, sd] = np.sum(likelihood(deci, pa_mu_sd))
-##    raise Exception
-#    return likelihood_model
 
 def _calculate_likelihood(deci, posta_inferred, aux_big_index):
     "Generalization of the one above"""
@@ -489,8 +461,8 @@ def _calculate_likelihood(deci, posta_inferred, aux_big_index):
     big_index = it.product(*aux_big_index[:-1]) # no need to loop over s
     for index in big_index:
             likelihood_model[index] = np.sum(likelihood(deci, posta_inferred[index][:]))
-#    raise Exception
     return likelihood_model
+
 def _save_posteriors(post_act, trial, state, thres, mu_sigma, aux_big_index):
     """ Save the posterior over actions given the observations and other data.
     It first loads the data file again and adds to it whatever is in post_act;
@@ -517,12 +489,6 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma, aux_big_index):
         out_file = './data/out_%d_%d.pi' % (os.getpid(), k)
         k += 1
 
-
-#    try:
-#        with open(in_file, 'rb') as mafi:
-#            data = pickle.load(mafi)
-#    except (FileNotFoundError, pickle.UnpicklingError, EOFError):
-#        data = {}
     data = {}
     big_index = it.product(*aux_big_index)
     for index in big_index:
@@ -612,8 +578,6 @@ def find_saved_posteriors(subject_data):
                 seen[(o,)]['mu'].add(makey[0])
                 seen[(o,)]['sd'].add(makey[1])
 
-
-
     # Find the values for mu and sd that are there for this subject
     print('Begin finding ranges...', flush = True)
     temp_set = {'mu':set(), 'sd':set()}
@@ -690,7 +654,6 @@ def check_data_file(subjects = None, trials = None,
             min_sigma = sd_range[0]
             max_sigma = sd_range[1] + 1
 
-#        flag_stop = 0
         bad_set = set()
         for m, mu in enumerate(range(min_mean, max_mean)):
             for sd, sigma in enumerate(range(min_sigma,max_sigma)):
@@ -698,9 +661,7 @@ def check_data_file(subjects = None, trials = None,
                     if (mu, sigma, state[s], trial[s], thres[s]) not in as_seen:
                         if (mu, sigma, state[s], trial[s], thres[s]) not in bad_set:
                             bad_set.add((mu, sigma, state[s], trial[s], thres[s]))
-#                        print(d, mu, sigma, state[s], trial[s], thres[s], flush=True)
 
-#                        return False
     return bad_set
 def _create_data_flat(mabe, deci, trial, state, thres, nD, nT):
     """ Takes simulated data and formats it to the data_flat way of life."""
@@ -718,7 +679,7 @@ def _create_data_flat(mabe, deci, trial, state, thres, nD, nT):
     data_flat['trial'] = trial
     return [data_flat]
 
-def main(data_type, mu_range, sd_range, subject = 0, data_flat = None,
+def main(data_type, shape_pars, subject = 0, data_flat = None,
          threshold = None, games = 20, trials = None, sim_mu = None, sim_sd = None,
          as_seen = None, return_results = True, normalize = True):
     r""" main(data_type, subject, mu_range, sd_range [, games] [, trials]
@@ -840,8 +801,6 @@ def main(data_type, mu_range, sd_range, subject = 0, data_flat = None,
     trial = {}
     state = {}
     mu_sigma = {}
-    shape_pars = ['unimodal_s',np.arange(mu_range[0], mu_range[1]+1),
-                  np.arange(sd_range[0], sd_range[1]+1)]
     for s in subject:
         (post_model[s], posta[s], deci[s], trial[s], state[s], mu_sigma[s]) = (
                                   infer_parameters(shape_pars = shape_pars,
@@ -850,22 +809,25 @@ def main(data_type, mu_range, sd_range, subject = 0, data_flat = None,
     if return_results is True:
         return post_model, posta, deci, trial, state, mu_sigma
 
-
-
-#    return data, data_flat
 if __name__ == '__main__':
     import argparse
     from os import getpid
     import sys
+    import numpy as np
 
     print('pid: %s' % getpid())
 
     parser = argparse.ArgumentParser()
 
-    parser.add_argument('-m', '--mu', nargs=2,
-                        help='(mu1, mu2) Interval for mu', type=int)
-    parser.add_argument('-s', '--sd', nargs=2,
-                        help='(sd1, sd2) Interval for SD', type=int)
+    help_par = """ Add parameter ranges. For each parameter in the grid search,
+    include the two values to specify the range to look in. It is assumed that
+    every integer value in the range will be searched. To have more than one
+    parameter, include the option once per parameter."""
+
+    parser.add_argument('--task', help='Select task. The available tasks can '+
+                        'be found in betClass.set_prior_goals()', type=str)
+    parser.add_argument('-p', '--parameter', nargs = 2, type = int,
+                        action='append', help=help_par)
     parser.add_argument('subjects', nargs='+',
                         help='Subject number. Can be more than one.', type=int)
     parser.add_argument('-t', '--trials', nargs='+',
@@ -881,24 +843,37 @@ if __name__ == '__main__':
     else:
         trials = args.trials
 
-    if args.index is not None:
-        mu_vals = np.arange(-15, 45+1) #make it inclussive
-        sd_vals = np.arange(1, 15+1) #make it inclussive
-        indices = np.unravel_index(args.index, (mu_vals.size, sd_vals.size))
-        one_mu = mu_vals[indices[0]]
-        one_sd = sd_vals[indices[1]]
-        mu_range = (one_mu, one_mu)
-        sd_range = (one_sd, one_sd)
+    if args.task is None:
+        task = 'unimodal_s'
     else:
-        mu_range = args.mu
-        sd_range = args.sd
+        task = args.task
+    shape_pars = [task]
+    par_values = []
+    if args.index is not None:
+        if task=='unimodal_s':
+            par_values.append(np.arange(-15, 45+1))
+            par_values.append(np.arange(1,15+1))
+        elif task=='sigmoid_s':
+            par_values.append(np.arange(-15,15+1))
+            par_values.append(np.arange(0.1,3,0.2))
+
+        unravel_sizes = [len(x) for x in par_values]
+
+        indices = np.unravel_index(args.index, unravel_sizes)
+        for i, index in enumerate(indices):
+            shape_pars.append([par_values[i][index]])
+    else:
+        for par in args.parameter:
+            shape_pars.append(range(*par))
+
     # Print message stating what is to be calculated
     if args.verbose:
         print('Subjects to use: %s' %args.subjects)
-        print('Mu and Sd intervals: (%d, %d), (%d, %d):'
-              % (mu_range[0], mu_range[1], sd_range[0], sd_range[1]))
+#        print('Mu and Sd intervals: (%d, %d), (%d, %d):'
+#              % (mu_range[0], mu_range[1], sd_range[0], sd_range[1]))
+        print('Task and parameters:',shape_pars)
         print('Trials to use: %s' % trials)
     sys.stdout.flush()
-    main(data_type = ['full','pruned'], mu_range = mu_range,
-         sd_range = sd_range, subject = args.subjects,
-         trials = trials, return_results = False)
+#    main(data_type = ['full','pruned'], mu_range = mu_range,
+#         sd_range = sd_range, subject = args.subjects,
+#         trials = trials, return_results = False)
