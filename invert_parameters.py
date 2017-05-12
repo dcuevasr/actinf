@@ -824,7 +824,7 @@ if __name__ == '__main__':
     every integer value in the range will be searched. To have more than one
     parameter, include the option once per parameter."""
 
-    parser.add_argument('--task', help='Select task. The available tasks can '+
+    parser.add_argument('--shape', help='Select goal shape. The available shapes can '+
                         'be found in betClass.set_prior_goals()', type=str)
     parser.add_argument('-p', '--parameter', nargs = 2, type = int,
                         action='append', help=help_par)
@@ -843,10 +843,10 @@ if __name__ == '__main__':
     else:
         trials = args.trials
 
-    if args.task is None:
+    if args.shape is None:
         task = 'unimodal_s'
     else:
-        task = args.task
+        task = args.shape
     shape_pars = [task]
     par_values = []
     if args.index is not None:

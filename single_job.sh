@@ -14,4 +14,4 @@
 SUBJNUMBER=1
 SHAPE='unimodal_s'
 module load python/3.5.2-anaconda4.2.0
-python /home/cuevasri/kolling/actinf/invert_parameters.py -v -i $((SLURM_ARRAY_TASK_ID-1)) $SUBJNUMBER $SHAPE
+python /home/cuevasri/kolling/actinf/invert_parameters.py -v -i $((SLURM_ARRAY_TASK_ID-1)) --shape $SHAPE $SUBJNUMBER
