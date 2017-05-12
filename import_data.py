@@ -42,6 +42,7 @@ def import_kolling_data(path_to_data = None):
         path_to_data = './exp_data/'
     with cd(path_to_data):
         files = [file for file in os.listdir('.') if file[-3:] == 'mat']
+        files = sorted(files)
         data = []
         for file in files:
             data.append(io.loadmat(file))
