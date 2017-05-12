@@ -874,6 +874,6 @@ if __name__ == '__main__':
         print('Task and parameters:',shape_pars)
         print('Trials to use: %s' % trials)
     sys.stdout.flush()
-#    main(data_type = ['full','pruned'], mu_range = mu_range,
-#         sd_range = sd_range, subject = args.subjects,
-#         trials = trials, return_results = False)
+    main(data_type = ['full','pruned'], shape_pars = shape_pars,
+         subject = args.subjects,
+         trials = trials, return_results = False)

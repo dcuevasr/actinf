@@ -1060,7 +1060,7 @@ def plot_performance(shape_pars, nGames = 10, fignum = 14):
         for g in range(nGames):
             shape_pars_it = index
             mabe.set_prior_goals(selectShape = 'unimodal_s',
-                                 shape_pars=shape_pars_it)
+                                 shape_pars=shape_pars_it, cutoff = False)
             tmp = list(index)
             tmp.append(g)
             results_index = tuple(tmp)
