@@ -1041,6 +1041,7 @@ def plot_performance(shape_pars, nGames = 10, fignum = 14):
     from matplotlib import pyplot as plt
     import itertools as it
     import betClass as bc
+    import tqdm
 
     mabe = bc.betMDP(nS = 72, thres = 60)
 #
@@ -1072,4 +1073,5 @@ def plot_performance(shape_pars, nGames = 10, fignum = 14):
 #                raise Exception
     plt.imshow(success, interpolation='none')
     plt.set_cmap('gray_r')
+
 #    return results, success

@@ -531,7 +531,7 @@ def concatenate_data(data_folder=None, out_file=None, old_files=None):
     with cd(data_folder):
         files = [file for file in os.listdir('.') if file[:3] == 'out' and file[-2:] == 'pi']
         try:
-            with open('posteriors.pi', 'rb') as mafi:
+            with open(out_file, 'rb') as mafi:
                 data = pickle.load(mafi)
         except (FileNotFoundError, pickle.UnpicklingError, EOFError):
             data = {}
@@ -795,6 +795,7 @@ def main(data_type, shape_pars, subject = 0, data_flat = None,
     # Run the inversion:
     if isinstance(subject, int):
         subject = subject,
+
     post_model = {}
     posta = {}
     deci = {}
@@ -855,7 +856,7 @@ if __name__ == '__main__':
             par_values.append(np.arange(1,15+1))
         elif task=='sigmoid_s':
             par_values.append(np.arange(-15,15+1))
-            par_values.append(np.arange(0.1,3,0.2))
+            par_values.append(np.arange(1,30,2)/10)
 
         unravel_sizes = [len(x) for x in par_values]
 

@@ -58,13 +58,14 @@ def clean_data(data):
     nZ = len(data) #number of participants
     data_clean = [data[z]['block'][0] for z in range(nZ)]
     data_out = []
-    for datin in data_clean:
+    for dd, datin in enumerate(data_clean):
         data_out.append({})
         for mana in ['points', 'reihe', 'response', 'rechts', 'target']:
             data_out[-1][mana] = np.array(datin[mana])
             for do in range(data_out[-1][mana].shape[0]):
                 data_out[-1][mana][do] = data_out[-1][mana][do].squeeze()
             data_out[-1][mana] = np.array(list(data_out[-1][mana]), dtype=int)
+        data_out[-1]['filename'] = data[dd]['filename']
 
     return data_out
 
@@ -102,6 +103,7 @@ def flatten_data(data):
         data_flat[-1]['TargetLevels'] = data[z]['TargetLevels'].astype(int)
         data_flat[-1]['NumberGames'] = data[z]['NumberGames']
         data_flat[-1]['NumberTrials'] = data[z]['NumberTrials']
+        data_flat[-1]['filename'] = data[z]['filename']
         for name in ['choice', 'obs', 'trial', 'reihe']:
             data_flat[-1][name] = np.ndarray.flatten(data[z][name])
         data_flat[-1]['threshold'] = np.ndarray.flatten(np.tile(data[z]['threshold'], (nT,1)), order='F')
