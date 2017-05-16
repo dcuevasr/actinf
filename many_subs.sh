@@ -8,7 +8,7 @@ fi
 
 ARRAY="1-915"
 if [ $2 == 'sigmoid_s' ]; then
-    ARRAY="1-610"
+    ARRAY="1-465"
 fi
 
 

@@ -490,9 +490,14 @@ class betMDP(afc.Actinf):
             raise ValueError('Bad combination of just_return and convolute')
 
     def prior_goals_sigmoid(self, Scenter, Sslope, convolute = True,
-                            just_return = True):
-        """ To be called from set_prior_goals()."""
-        sigmoid = lambda C,S,X: 1/(1 + np.exp(-S*(X - C)))
+                            just_return = True, slope_div = 10):
+        """ To be called from set_prior_goals().
+
+        NOTE: slope_div rescales the S parameter in the sigmoid (slope). This
+        is done to avoid numerical problems when saving posteriors over
+        actions in invert_parameters. It can be set to 1 to remove the effect.
+        """
+        sigmoid = lambda C,S,X: 1/(1 + np.exp(-S/slope_div*(X - C)))
         points = np.arange(self.nS)
         goals = sigmoid(Scenter, Sslope, points)
         if convolute:

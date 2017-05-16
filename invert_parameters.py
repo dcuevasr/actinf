@@ -200,7 +200,6 @@ def infer_parameters(num_games = None, data = None, as_seen = None,
                                              cutoff = False)
                                              +np.exp(-16))
 
-
     print('Took %d seconds.' % (time() - tini))
 
 
@@ -856,7 +855,7 @@ if __name__ == '__main__':
             par_values.append(np.arange(1,15+1))
         elif task=='sigmoid_s':
             par_values.append(np.arange(-15,15+1))
-            par_values.append(np.arange(1,30,2)/10)
+            par_values.append(np.arange(1,30,2))
 
         unravel_sizes = [len(x) for x in par_values]
 

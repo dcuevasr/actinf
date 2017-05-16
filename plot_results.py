@@ -167,7 +167,7 @@ def plot_by_thres(shape_pars = None, subjects = None, trials = None, fignum = 4,
     import import_data as imda
 
     if shape_pars is None:
-        shape_pars = ['unimodal_s', range(-15,45+1), range(1, 15+1)]
+        shape_pars = ['unimodal_s', np.arange(-15,45+1), np.arange(1, 15+1)]
 
     if data_flat is None:
         _, data_flat = imda.main()
@@ -315,9 +315,10 @@ if __name__ == '__main__':
     plot_likelihoods(likeli)
     plot_rp_pr(posta, 5, 10)
 
-def select_by_doability(rp_lims, trials, data_flat = None, fignum = 5):
+def select_by_doability(rp_lims, trials, data_flat = None, fignum = 5,
+                        as_seen = None):
     """ Will select the obs that meet the requirement of having a so-and-so
-    risk pressure.
+    risk pressure. These trials will be sent to plot_by_thres for plotting.
 
     Parameters
     rp_lims: list of duples of floats
@@ -373,16 +374,17 @@ def select_by_doability(rp_lims, trials, data_flat = None, fignum = 5):
                 datum['TargetLevels'][tl] = 0
 
 #    return rp
-    plot_by_thres(trials = trials, data_flat = data_flat, fignum = fignum)
+    plot_by_thres(trials = trials, data_flat = data_flat, fignum = fignum,
+                  as_seen = as_seen)
 
-def prepare_inputs_doability(trials_left = 1):
+def prepare_inputs_doability(trials_left = 1, as_seen = None):
     """ Little 'script' to prepare inputs for select_by_doability."""
     for c in range(1,trials_left + 1):
         rp_lims = []
         trials = range(7,7-c, -1)
         for t in trials:
             rp_lims.append((0.8*c*14, 1.2*c*20))
-        select_by_doability(rp_lims, trials, fignum=c)
+        select_by_doability(rp_lims, trials, fignum=c, as_seen = as_seen)
 
 def concatenate_subjects():
     """ Concatenates the data from one subject into a single-subject-like
@@ -472,18 +474,30 @@ def plot_concatenated_linear(fignum = 7):
         ax.set_title('Threshold: %d' % [595,930,1035,1105][i])
     plt.suptitle(r'Likelihood map over all subjects')
 
-def plot_animation_trials(subject = 0, nDT = 2, fignum = 8, data_flat = None):
+def plot_animation_trials(subject = 0, nDT = 2, fignum = 8, data_flat = None,
+                          nA = 3, as_seen = None):
     """ Creates a number of plots for a single subject with different trial
     numbers being taken into account.
+
+    Parameters
+    ----------
+    subject: int
+        Subject number to use.
+    nA: int
+        Number of trials for each plot. For example, if nDT = 3, then the
+        first plot will use trials 1,2,3.
+    nDT: int
+        Number of plots to make.
     """
     import pickle
     import matplotlib.gridspec as gridspec
     import invert_parameters as invp
 
-    data_file = './data/posteriors.pi'
-    with open(data_file, 'rb') as mafi:
-        as_seen = pickle.load(mafi)
-        print('File opened; data loaded.')
+    if as_seen is None:
+        data_file = './data/posteriors.pi'
+        with open(data_file, 'rb') as mafi:
+            as_seen = pickle.load(mafi)
+            print('File opened; data loaded.')
 
     target_levels = [595, 930, 1035, 1105]
     fig = plt.figure(fignum)
@@ -496,16 +510,18 @@ def plot_animation_trials(subject = 0, nDT = 2, fignum = 8, data_flat = None):
         inner_grid = gridspec.GridSpecFromSubplotSpec(4,1,
                               subplot_spec = outer_grid[i],
                               wspace=0.0, hspace=0.0)
-        trials = all_trials[i:(i+3)]
+        trials = all_trials[i:(i+nA)]
         for th in range(nTL):
-            likeli, _, _, _, _, _ = invp.main(data_type=['threshold', 'pruned'],
-                                  threshold=th, mu_range=(-15,45),
-                                  sd_range=(1,15), subject=subject,
+            shape_pars = ['unimodal_s', np.arange(-15,45+1), np.arange(1,15+1)]
+            loglikeli, _, _, _, _, _ = invp.main(data_type=['threshold', 'pruned'],
+                                  threshold=th, shape_pars = shape_pars,
+                                  subject=subject,
                                   trials = trials, as_seen = as_seen,
                                   data_flat = data_flat,
                                   return_results=True)
             ax = plt.Subplot(fig, inner_grid[th])
-            ax.imshow(likeli[subject], aspect=0.2, interpolation='none')
+            ax.imshow(np.exp(loglikeli[subject]), aspect=0.2, interpolation='none')
+            plt.set_cmap('gray_r')
             ax.tick_params(width=0.01)
             if ax.is_first_row():
                 ax.set_title('Trials = %s, Thres = %d' % (list(trials),target_levels[th]),
@@ -533,11 +549,6 @@ def plot_animation_trials(subject = 0, nDT = 2, fignum = 8, data_flat = None):
 
     plt.show()
 
-def plot_by_points():
-    """ Divide trials per number of plots (and threshold) into low, mid, high
-    and past-threshold.
-    """
-    pass
 
 def plot_without_past_threshold(nsubs = 35, fignum = 9, plot = True,
                                 data_flat = None):
@@ -1032,18 +1043,16 @@ def plot_lnc(mu_vec = None, sd_vec = None, fignum = 13):
                     ax.set_title(r'$\sigma = $%s' % sigma)
                 fig.add_subplot(ax)
 
-def plot_performance(shape_pars, nGames = 10, fignum = 14):
+def plot_performance(shape_pars, nGames = 10, fignum = 14, nS = 72, thres = 60):
     """ Plots a matrix containing the performance of the model for all the
     parameter values contained in shape_pars
     """
 
-    import invert_parameters as invp
     from matplotlib import pyplot as plt
     import itertools as it
     import betClass as bc
-    import tqdm
 
-    mabe = bc.betMDP(nS = 72, thres = 60)
+    mabe = bc.betMDP(nS = nS, thres = thres)
 #
 #    mabe, deci, trial, state, thres, posta, preci, stateV, nD, nT = (
 #                  invp.simulate_data(num_games = nGames, nS = 72, thres = 60))
