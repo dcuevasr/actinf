@@ -468,17 +468,23 @@ class betMDP(afc.Actinf):
 #                raise ValueError('Values for Scenter and Sslope must be '+
 #                                 'provided when using ''sigmoid''')
             goals = self.prior_goals_sigmoid(Scenter, Sslope,
-                                     convolute = convolute, just_return = True)
+                                     convolute = convolute, just_return = True,
+                                     cutoff = cutoff)
         elif selectShape == 'sigmoid_s':
             Scenter, Sslope = shape_pars
             Scenter += self.thres
 #                raise ValueError('Values for Scenter and Sslope must be '+
 #                                 'provided when using ''sigmoid''')
             goals = self.prior_goals_sigmoid(Scenter, Sslope,
-                                     convolute = convolute, just_return = True)
+                                     convolute = convolute, just_return = True,
+                                     cutoff = cutoff)
+        elif selectShape == 'exponential':
+            exponent = shape_pars[0]
+            goals = self.prior_goals_exponential(exponent,
+                                     convolute = convolute, just_return = True,
+                                     cutoff = cutoff)
         else:
-            raise ValueError('selectShape can only be ''flat'', ''ramp'', '+
-                            '''unimodal'', ''unimodal_s'' or ''sigmoid''')
+            raise ValueError('Unrecognized value for selectShape')
         if just_return is True:
             return goals
         elif just_return is False and convolute is True:
@@ -490,7 +496,7 @@ class betMDP(afc.Actinf):
             raise ValueError('Bad combination of just_return and convolute')
 
     def prior_goals_sigmoid(self, Scenter, Sslope, convolute = True,
-                            just_return = True, slope_div = 10):
+                            just_return = True, slope_div = 10, cutoff = True):
         """ To be called from set_prior_goals().
 
         NOTE: slope_div rescales the S parameter in the sigmoid (slope). This
@@ -502,6 +508,10 @@ class betMDP(afc.Actinf):
         goals = sigmoid(Scenter, Sslope, points)
         if convolute:
             goals = np.tile(goals, self.nP)
+            goals /= goals.sum()
+
+        if cutoff:
+            goals[:self.thres] = 0
             goals /= goals.sum()
 
         if just_return:
@@ -585,6 +595,29 @@ class betMDP(afc.Actinf):
         elif just_return is False and convolute is True:
             self.C = goals
             self.lnC = np.log(goals)
+        else:
+            raise ValueError('Bad combination of just_return and convolute')
+
+    def prior_goals_exponential(self, exponent, convolute = True, cutoff = True,
+                                just_return = True):
+        """ Creates priors that follow an exponential law with the given power.
+
+        To be called from set_prior_goals().
+        """
+        points = np.arange(self.nS)
+        expoints = (0.1*points)**exponent
+
+        if cutoff is True:
+            expoints[:self.thres] = 0
+        if convolute is True:
+            expoints = np.tile(expoints, self.nP)
+        expoints /= expoints.sum()
+
+        if just_return is True:
+            return expoints
+        elif just_return is False and convolute is True:
+            self.C = expoints
+            self.lnC = np.log(expoints)
         else:
             raise ValueError('Bad combination of just_return and convolute')
 
