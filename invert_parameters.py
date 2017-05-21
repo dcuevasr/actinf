@@ -755,7 +755,7 @@ def three_shapes_mc(retorno = True, subjects = None):
         with open('./logli_all_shapes.pi', 'wb') as mafi:
             pickle.dump(logli, mafi)
 
-def plot_three_shapes(logli, shapes = None, norm_const = 1, fignum = 15):
+def plot_three_shapes(logli, shapes = None, norm_const = 1, fignum = 15, normalize_together = False):
     """ Plots the dictionary from the three_shapes() method.
 
     Parameters
@@ -802,7 +802,8 @@ def plot_three_shapes(logli, shapes = None, norm_const = 1, fignum = 15):
     for key in logli.keys():
         max_likelihoods[plots[key[0]], tl_dict[key[2]]] = max(max_likelihoods[plots[key[0]], tl_dict[key[2]]], logli[key])
     max_likelihoods = np.exp(max_likelihoods)
-
+    if normalize_together:
+        max_likelihoods = np.tile(max_likelihoods.max(axis=0),(len(plots),1))
     fig = plt.figure(fignum)
     fig.clf()
     lnC = [0] # For cases in which not all shapes have data in logli
@@ -817,7 +818,11 @@ def plot_three_shapes(logli, shapes = None, norm_const = 1, fignum = 15):
                                      shape_pars = key[3:], convolute = False,
                                      cutoff = False, just_return = True)
                     ax.plot(lnC, color='black', alpha = np.exp(logli[key])/max_likelihoods[plots[key[0]], tl_dict[key[2]]]/norm_const)
+<<<<<<< HEAD
 
+=======
+            ax.coordinates = [plots[sh], tl_dict[lvl]]
+>>>>>>> fbc8d48fe4ea19e55ccb3bb4bc05c2732e66d8ff
             ticks = ax.get_yticks()
             ymax = ticks[-1]
             ax.set_yticks([])
@@ -826,10 +831,13 @@ def plot_three_shapes(logli, shapes = None, norm_const = 1, fignum = 15):
             fig.add_subplot(ax)
 
     for ax in fig.get_axes():
-        ax.set_ylabel('threshold:\n %s' % target_levels[ax.rowNum], fontsize=8)
-        ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
+        if ax.coordinates[0] == 0:
+            ax.set_ylabel('threshold:\n %s' % target_levels[ax.rowNum], fontsize=8)
+#        ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
         if ax.rowNum == 3:
             ax.set_xlabel('Points')
+        if ax.rowNum == 0:
+            ax.set_title(['Gaussian', 'Sigmoid'][ax.coordinates[0]])
     fig.suptitle('Likelihood for different shapes of priors over final state (goals)')
     plt.savefig('./logli.png', dpi = 300)
 
