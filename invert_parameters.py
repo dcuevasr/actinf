@@ -818,11 +818,8 @@ def plot_three_shapes(logli, shapes = None, norm_const = 1, fignum = 15, normali
                                      shape_pars = key[3:], convolute = False,
                                      cutoff = False, just_return = True)
                     ax.plot(lnC, color='black', alpha = np.exp(logli[key])/max_likelihoods[plots[key[0]], tl_dict[key[2]]]/norm_const)
-<<<<<<< HEAD
 
-=======
             ax.coordinates = [plots[sh], tl_dict[lvl]]
->>>>>>> fbc8d48fe4ea19e55ccb3bb4bc05c2732e66d8ff
             ticks = ax.get_yticks()
             ymax = ticks[-1]
             ax.set_yticks([])
