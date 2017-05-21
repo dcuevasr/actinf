@@ -749,6 +749,21 @@ def three_shapes_mc(retorno = True, subjects = None):
                                         shape_pars = ['sigmoid_s',[mu],slope_vec])
                 for sl in range(len(slope_vec)):
                     logli[('sigmoid_s', s, lvl, mu, slope_vec[sl])] = tmp_logli[0,sl]
+
+    with open('./data/posteriors_subj_exponential.pi', 'rb') as mafi:
+        as_seen = pickle.load(mafi)
+    for l, lvl in enumerate(target_levels):
+        exp_vec = np.arange(5,100,2)
+        dataL = prepare_data(lvl, data_flat)
+        nS = np.round(target_levels_s[l]*1.2)
+        for s in range(len(dataL)):
+            tmp_logli, _,_,_,_,_ = infer_parameters(data = dataL[s],
+                                        as_seen = as_seen, normalize = False,
+                                        shape_pars = ['exponential',  exp_vec])
+        for ex in range(len(exp_vec)):
+            logli[('exponential', s, lvl, exp_vec[ex])] = tmp_logli[0,ex]
+
+
     if retorno:
         return logli
     else:
@@ -1018,6 +1033,7 @@ if __name__ == '__main__':
             par_values.append(np.arange(1,30,2))
         elif task=='exponential':
             par_values.append(np.arange(5,100,2))
+
 
         unravel_sizes = [len(x) for x in par_values]
 
