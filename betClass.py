@@ -605,7 +605,7 @@ class betMDP(afc.Actinf):
         To be called from set_prior_goals().
         """
         points = np.arange(self.nS)
-        expoints = (0.1*points)**exponent
+        expoints = (0.1*points)**(exponent/10)
 
         if cutoff is True:
             expoints[:self.thres] = 0

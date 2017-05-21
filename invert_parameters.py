@@ -767,9 +767,9 @@ def plot_three_shapes(logli, shapes = None, norm_const = 1, fignum = 15):
         from the data itself.
     norm_const, int
         Controls the maximum alpha that any given lnC can have. The idea is that for
-        logli data that spans many subjects, this number is set to the number of 
+        logli data that spans many subjects, this number is set to the number of
         subjects or something like that.
-    
+
 
     """
     import betClass as bc
@@ -793,7 +793,7 @@ def plot_three_shapes(logli, shapes = None, norm_const = 1, fignum = 15):
     plots = {}
     for t,thing in enumerate(plots_set):
         plots[thing] = t
-        
+
 #    plots = {'unimodal_s':0, 'sigmoid_s':1, 'exponential':2}
 
     outer_grid = gs.GridSpec(1, len(plots))
@@ -817,7 +817,7 @@ def plot_three_shapes(logli, shapes = None, norm_const = 1, fignum = 15):
                                      shape_pars = key[3:], convolute = False,
                                      cutoff = False, just_return = True)
                     ax.plot(lnC, color='black', alpha = np.exp(logli[key])/max_likelihoods[plots[key[0]], tl_dict[key[2]]]/norm_const)
-            
+
             ticks = ax.get_yticks()
             ymax = ticks[-1]
             ax.set_yticks([])
@@ -832,7 +832,7 @@ def plot_three_shapes(logli, shapes = None, norm_const = 1, fignum = 15):
             ax.set_xlabel('Points')
     fig.suptitle('Likelihood for different shapes of priors over final state (goals)')
     plt.savefig('./logli.png', dpi = 300)
-                    
+
 def main(data_type, shape_pars, subject = 0, data_flat = None,
          threshold = None, games = 20, trials = None, sim_mu = None, sim_sd = None,
          as_seen = None, return_results = True, normalize = True):
@@ -1011,6 +1011,8 @@ if __name__ == '__main__':
         elif task=='sigmoid_s':
             par_values.append(np.arange(-15,15+1))
             par_values.append(np.arange(1,30,2))
+        elif task=='exponential':
+            par_values.append(np.arange(5,100,2))
 
         unravel_sizes = [len(x) for x in par_values]
 
