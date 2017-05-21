@@ -493,9 +493,13 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma, aux_big_index):
     big_index = it.product(*aux_big_index)
     for index in big_index:
         st = index[-1]
+        data_index = [x for x in mu_sigma[index[:-1]]]
+        data_index.append(state[st])
+        data_index.append(trial[st])
+        data_index.append(thres[st])
+        data_index = tuple(data_index)
         try: #In case the function was called by atexit with partial data
-            data[(mu_sigma[index[:-1]][0], mu_sigma[index[:-1]][1],
-                  state[st], trial[st], thres[st])] = post_act[index]
+            data[data_index] = post_act[index]
         except KeyError:
             raise
     with open(out_file, 'wb') as mafi:
