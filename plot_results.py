@@ -1075,8 +1075,8 @@ def plot_performance(shape_pars, nGames = 10, fignum = 14, nS = 72, thres = 60):
             tmp.append(g)
             results_index = tuple(tmp)
             results[results_index] = mabe.full_inference(just_return = True)
-#            print('Final state', results[results_index]['RealStates'][-1]%72)
-            if results[results_index]['RealStates'][-1]%72 >= mabe.thres:
+#            print('Final state', results[results_index]['RealStates'][-1]%nS)
+            if results[results_index]['RealStates'][-1]%nS >= mabe.thres:
 #                print('Index:',i, index)
                 success[np.unravel_index(i,sizes_pars)] += 1
 #                raise Exception
@@ -1084,3 +1084,22 @@ def plot_performance(shape_pars, nGames = 10, fignum = 14, nS = 72, thres = 60):
     plt.set_cmap('gray_r')
 
 #    return results, success
+
+
+def plot_inferred_shapes(data, as_seen, shape_pars, shape_pars_r = None, fignum=16):
+    """ Plots the shapes of the inferred parameters.
+    shape_pars_r, if given, is used to plot the shape used for simulating data.
+    """
+    import invert_parameters as invp
+    import betClass as bc
+    from matplotlib import pyplot as plt
+    
+    target_levels = [595,930,1035,1105]
+    
+    mabes = {}
+    for lvl in target_levels:
+        thres = np.round(lvl/10).astype(int)
+        nS = np.round(1.2*thres).astype(int)
+        mabes[lvl] = bc.betMDP(thres = thres, nS = nS)
+
+    
