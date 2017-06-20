@@ -1085,21 +1085,315 @@ def plot_performance(shape_pars, nGames = 10, fignum = 14, nS = 72, thres = 60):
 
 #    return results, success
 
-
-def plot_inferred_shapes(data, as_seen, shape_pars, shape_pars_r = None, fignum=16):
-    """ Plots the shapes of the inferred parameters.
-    shape_pars_r, if given, is used to plot the shape used for simulating data.
+def three_shapes_mc(retorno = True, subjects = None):
+    """ Calculates the data likelihood for three distinct utility shapes:
+        Gaussian, sigmoid and exponential.
     """
+    import numpy as np
+    import pickle
+    import import_data as imda
     import invert_parameters as invp
+
+
+    data, data_flat = imda.main()
+
+
+    if isinstance(subjects, int):
+        subjects = subjects,
+
+    if subjects is not None:
+        data_flat = [data_flat[t] for t in subjects]
+
+    def prepare_data(thres, data_flat):
+        from copy import deepcopy
+        dataL = deepcopy(data_flat)
+
+        for datum in dataL:
+            indices = datum['threshold'] == thres
+            for field in ['choice','trial','obs','reihe','threshold']:
+                datum[field] = datum[field][indices]
+        return dataL
+
+    target_levels = np.array([595, 930, 1035, 1105])
+    target_levels_s = [60, 93, 104, 110]
+    logli = {}
+
+    # Begin with Gaussian
+    with open('./data/posteriors_subj_uni.pi', 'rb') as mafi:
+        as_seen = pickle.load(mafi)
+    for l,lvl in enumerate(target_levels):
+        mu_vec = np.arange(-15,np.round(target_levels_s[l]*0.2))
+        dataL = prepare_data(lvl, data_flat)
+        nS = np.round(target_levels_s[l]*1.2)
+        for mu in mu_vec:
+            sd_vec = np.arange(1, min(nS-mu,15))
+            for s in range(len(dataL)):
+                tmp_logli,_,_,_,_,_ = invp.infer_parameters(data = dataL[s],
+                                    as_seen = as_seen, normalize = False,
+                                    shape_pars = ['unimodal_s', [mu], sd_vec])
+                for sd in range(len(sd_vec)):
+                    logli[('unimodal_s', s, lvl, mu, sd_vec[sd])] = tmp_logli[0,sd]
+
+    # Begin with sigmoid
+    with open('./data/posteriors_subj_sigmoid_s.pi', 'rb') as mafi:
+        as_seen = pickle.load(mafi)
+    cutoff_point = 0.95
+    for l, lvl in enumerate(target_levels):
+        mu_vec = np.arange(-15,15)
+        dataL = prepare_data(lvl, data_flat)
+        nS = np.round(target_levels_s[1]*1.2)
+        for mu in mu_vec:
+            possible_slopes = np.arange(1,30,2)
+#            possible_slopes = np.hstack([possible_slopes, 31])
+            slope_min = 10*np.log(1/cutoff_point - 1)/(mu + target_levels_s[l] - nS)
+            slope_av_min = np.searchsorted(possible_slopes, slope_min, side='right')
+            if slope_av_min >= len(possible_slopes)-1:
+                continue
+            slope_vec = np.arange(possible_slopes[slope_av_min], 30, 2)
+            for s in range(len(dataL)):
+                tmp_logli,_,_,_,_,_ = invp.infer_parameters(data = dataL[s],
+                                        as_seen = as_seen, normalize = False,
+                                        shape_pars = ['sigmoid_s',[mu],slope_vec])
+                for sl in range(len(slope_vec)):
+                    logli[('sigmoid_s', s, lvl, mu, slope_vec[sl])] = tmp_logli[0,sl]
+
+    with open('./data/posteriors_subj_exp.pi', 'rb') as mafi:
+        as_seen = pickle.load(mafi)
+    for l, lvl in enumerate(target_levels):
+        exp_vec = np.arange(5,100,2)
+        dataL = prepare_data(lvl, data_flat)
+        nS = np.round(target_levels_s[l]*1.2)
+        for s in range(len(dataL)):
+            tmp_logli, _,_,_,_,_ = invp.infer_parameters(data = dataL[s],
+                                        as_seen = as_seen, normalize = False,
+                                        shape_pars = ['exponential',  exp_vec])
+        for ex in range(len(exp_vec)):
+            logli[('exponential', s, lvl, exp_vec[ex])] = tmp_logli[ex]
+
+
+    if retorno:
+        return logli
+    else:
+        with open('./logli_all_shapes.pi', 'wb') as mafi:
+            pickle.dump(logli, mafi)
+
+def plot_three_shapes(logli, shapes = None, norm_const = 1, fignum = 15, normalize_together = False):
+    """ Plots the dictionary from the three_shapes() method.
+
+    Parameters
+    ----------
+    logli: dictionary, keys={shape,subj, thres, par1, par2}
+        Contains the log-likelihoods of each key.
+    shapes: list of str
+        Which shapes are contained in the data. If not provided, it is inferred
+        from the data itself.
+    norm_const, int
+        Controls the maximum alpha that any given lnC can have. The idea is that for
+        logli data that spans many subjects, this number is set to the number of
+        subjects or something like that.
+
+
+    """
     import betClass as bc
     from matplotlib import pyplot as plt
-    
+    import matplotlib.gridspec as gs
+
     target_levels = [595,930,1035,1105]
-    
+    tl_dict = {595:0, 930:1, 1035:2, 1105:3}
+
     mabes = {}
     for lvl in target_levels:
         thres = np.round(lvl/10).astype(int)
         nS = np.round(1.2*thres).astype(int)
         mabes[lvl] = bc.betMDP(thres = thres, nS = nS)
 
-    
+    # find the maxima to normalize the alpha:
+    plots_set = set()
+    plots = {}
+    inv_plots = {}
+    if shapes is None: # See which shapes are included in the logli data
+        for key in logli.keys():
+            plots_set.add(key[0])
+    else:
+        for masha in shapes:
+            plots_set.add(masha)
+    for t,thing in enumerate(plots_set):
+        plots[thing] = t
+        inv_plots[t] = thing
+
+#    plots = {'unimodal_s':0, 'sigmoid_s':1, 'exponential':2}
+
+    outer_grid = gs.GridSpec(1, len(plots))
+
+    max_likelihoods = -np.inf*np.ones((len(plots), 4))
+    for key in logli.keys():
+        if key[0] not in plots:
+            continue
+        max_likelihoods[plots[key[0]], tl_dict[key[2]]] = max(max_likelihoods[plots[key[0]], tl_dict[key[2]]], logli[key])
+    max_likelihoods = np.exp(max_likelihoods)
+    if normalize_together:
+        max_likelihoods = np.tile(max_likelihoods.max(axis=0),(len(plots),1))
+    fig = plt.figure(fignum)
+    fig.clf()
+    lnC = [0] # For cases in which not all shapes have data in logli
+    for sh in plots.keys():
+        for lvl in target_levels:
+            inner_grid = gs.GridSpecFromSubplotSpec(4,1, subplot_spec = outer_grid[plots[sh]])
+            ax = plt.Subplot(fig, inner_grid[tl_dict[lvl]])
+            for key in logli.keys():
+        #        plt.subplot(1,2,plots[key[0]])
+                if key[2] == lvl and key[0] == sh:
+                    lnC = mabes[key[2]].set_prior_goals(selectShape=key[0],
+                                     shape_pars = key[3:], convolute = False,
+                                     cutoff = False, just_return = True)
+                    ax.plot(lnC, color='black', alpha = np.exp(logli[key])/max_likelihoods[plots[key[0]], tl_dict[key[2]]]/norm_const)
+
+            ax.coordinates = [plots[sh], tl_dict[lvl]]
+            ticks = ax.get_yticks()
+            ymax = ticks[-1]
+            ax.set_yticks([])
+            ax.set_xlim([0,len(lnC)])
+            ax.plot([lvl/10, lvl/10], [0, ymax], color='r', linewidth = 3, alpha = 0.5)
+            fig.add_subplot(ax)
+
+    for ax in fig.get_axes():
+        if ax.coordinates[0] == 0:
+            ax.set_ylabel('threshold:\n %s' % target_levels[ax.rowNum], fontsize=8)
+#        ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
+        if ax.rowNum == 3:
+            ax.set_xlabel('Points')
+        if ax.rowNum == 0:
+            ax.set_title(inv_plots[ax.coordinates[0]])
+    fig.suptitle('Likelihood for different shapes of priors over final state (goals)')
+    plt.savefig('./logli.png', dpi = 300)
+
+
+def plot_inferred_shapes(data_flat, as_seen, shape_pars, shape_pars_r = None,
+                         showfig = True, fignum=16, figname = None):
+    """ Plots the shapes of the inferred parameters.
+    shape_pars_r, if given, is used to plot the shape used for simulating data.
+    """
+    import invert_parameters as invp
+    import betClass as bc
+    from matplotlib import pyplot as plt
+    from itertools import product
+
+    def prepare_data(thres, data_flat_t):
+        from copy import deepcopy
+        dataL = deepcopy(data_flat_t)
+
+        for datum in dataL:
+            indices = datum['threshold'] == thres
+            for field in ['choice','trial','obs','reihe','threshold']:
+                datum[field] = datum[field][indices]
+        return dataL
+
+    target_levels = data_flat[0]['TargetLevels']
+
+    mabes = {}
+    fig = plt.figure(fignum)
+    for lvl in target_levels:
+        thres = np.round(lvl/10).astype(int)
+        nS = np.round(1.2*thres).astype(int)
+        mabes[lvl] = bc.betMDP(thres = thres, nS = nS)
+
+    for sp,lvl in enumerate(target_levels):
+        plt.subplot(4,1,sp+1)
+
+        dataL = prepare_data(lvl, data_flat)
+        logli, _, _, _, _, _ = invp.infer_parameters(data = dataL[0],
+                 as_seen = as_seen, normalize = False, shape_pars = shape_pars)
+
+        likelihood = np.exp(logli - logli.max())
+        likelihood /= likelihood.sum()
+
+        best_model = np.unravel_index(np.argmax(likelihood), likelihood.shape)
+        aux_big_index = [range(len(x)) for x in shape_pars[1:]]
+        big_index = product(*aux_big_index)
+        for index in big_index:
+            c_shape_pars = [shape_pars[i+1][index[i]] for i in range(len(index))]
+            lnC = mabes[lvl].set_prior_goals(selectShape = shape_pars[0],
+                                shape_pars = c_shape_pars, just_return = True,
+                                cutoff = False, convolute = False)
+            ax = plt.plot(lnC, alpha = likelihood[index], color = 'black', label='Best fits')
+            if index == tuple(best_model):
+                best_model_ax, = ax
+        if shape_pars_r is not None:
+            lnC = mabes[lvl].set_prior_goals(selectShape = shape_pars_r[0],
+                                shape_pars = shape_pars_r[1:], just_return = True,
+                                cutoff = False, convolute = False)
+            true_model_ax, = plt.plot(lnC, alpha = 0.5, color = 'green', linewidth=1.5, label='True numbers')
+            plt.legend(handles=[best_model_ax, true_model_ax], loc=2, fontsize='x-small')
+        ylim = plt.gca().get_ylim()
+        ymax = ylim[1]
+        plt.plot([lvl/10, lvl/10], [0, ymax], color='red', linewidth=3, alpha=0.5)
+        plt.gca().set_ylim(ylim)
+        plt.gca().set_yticks([])
+        plt.gca().set_ylabel('Threshold:\n %s' % np.round(lvl/10).astype(int))
+    if showfig:
+        plt.show()
+    else:
+        if figname is None:
+            figname = './fig%s.png' % fignum
+        plt.savefig(figname, dpi=300)
+
+
+def plot_rp_vs_risky(as_seen = None, fignum = 17, subjects = None, savefig=False):
+    """ Plots risk pressure vs probability of choosing the risky offer as a scatter plot."""
+
+    from matplotlib import pyplot as plt
+    import invert_parameters as invp
+    import import_data as imda
+    from utils import calc_subplots
+    import pickle
+    import numpy as np
+    import scipy as sp
+
+    if subjects is None:
+        subjects = 0,
+    nSubs = len(subjects)
+    s1, s2 = calc_subplots(nSubs)
+    fig = plt.figure(fignum)
+    fig.clf()
+
+    data, data_flat = imda.main()
+    risk_p = risk_pressure(data_flat)
+    if as_seen is None:
+        with open('./data/posteriors_subj_uni.pi', 'rb') as mafi:
+            as_seen = pickle.load(mafi)
+
+    mafu = lambda x,a,b: a*x + b
+    for s in subjects:
+
+        logli, posta, _, _, _, _ = invp.infer_parameters(as_seen = as_seen, normalize = False,
+                                                     shape_pars = ['unimodal_s',np.arange(-15,20), np.arange(1,15)],
+                                                     data = data_flat[s])
+        max_model = np.unravel_index(logli.argmax(), logli.shape)
+        datax = risk_p[s]
+        datay = posta[max_model[0], max_model[1],:,1]
+        par_opt, par_covar = sp.optimize.curve_fit(mafu, datax, datay)
+        xmin = risk_p[s].min()
+        xmax = risk_p[s].max()
+        lin_x = np.arange(xmin,xmax, 0.1)
+        lin_y = mafu(lin_x, *par_opt)
+
+        ax = plt.subplot(s1,s2,s+1)
+        ax.scatter(datax, datay, color='r', s=1)
+        ax.plot(lin_x, lin_y, color='black', alpha=0.5)
+        ax.set_xlim([0,80])
+        ax.set_ylim([0,1])
+        if ax.is_first_col() and ax.is_last_row():
+            ax.set_xlabel('Risk pressure', fontsize=8)
+            ax.set_ylabel('Probability of Risky', fontsize=8)
+
+            ax.set_xticklabels(ax.get_xticks(), fontsize=8)
+            ax.set_yticklabels(ax.get_yticks(), fontsize=8)
+        else:
+            ax.set_xlabel('')
+            ax.set_ylabel('')
+            ax.set_xticks([])
+            ax.set_yticks([])
+    if savefig is True:
+        plt.savefig('./risky.png', dpi=300)
+    else:
+        plt.show(block = False)

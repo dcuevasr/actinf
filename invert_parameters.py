@@ -414,7 +414,7 @@ def simulate_data(shape_pars = None, num_games = 10, paradigm = None, nS = 100,
         stateV[n, st] = 1
     return mabes, deci, trial, state, thres, posta, preci, stateV, nD, nT
 
-def simulate_data_4_conds(mu, sd):
+def simulate_data_4_conds(shape_pars):
     """ Simulates data identical to the experimental data, in that there are
     4 conditions, 12 games. The format is as the output of import_data.main().
 
@@ -435,7 +435,7 @@ def simulate_data_4_conds(mu, sd):
         mabes, deci, trial, state, thres, posta, preci, stateV, nD, nT = (
                                           simulate_data(num_games = 12,
                                           nS = np.round(1.2*tg).astype(int),
-                                          mu = mu, sd = sd, thres = tg))
+                                          shape_pars = shape_pars, thres = tg))
         tmp_data[tg] = _create_data_flat(mabes, deci, trial, state, thres, nD, nT)
 
     data_flat = tmp_data[target_lvls[0]]
@@ -683,179 +683,7 @@ def _create_data_flat(mabe, deci, trial, state, thres, nD, nT):
     data_flat['trial'] = trial
     return [data_flat]
 
-def three_shapes_mc(retorno = True, subjects = None):
-    """ Calculates the data likelihood for three distinct utility shapes:
-        Gaussian, sigmoid and exponential.
-    """
-    import numpy as np
-    import pickle
-    import import_data as imda
 
-
-    data, data_flat = imda.main()
-
-
-    if isinstance(subjects, int):
-        subjects = subjects,
-
-    if subjects is not None:
-        data_flat = [data_flat[t] for t in subjects]
-
-    def prepare_data(thres, data_flat):
-        from copy import deepcopy
-        dataL = deepcopy(data_flat)
-
-        for datum in dataL:
-            indices = datum['threshold'] == thres
-            for field in ['choice','trial','obs','reihe','threshold']:
-                datum[field] = datum[field][indices]
-        return dataL
-
-    target_levels = np.array([595, 930, 1035, 1105])
-    target_levels_s = [60, 93, 104, 110]
-    logli = {}
-
-    # Begin with Gaussian
-    with open('./data/posteriors_subj_uni.pi', 'rb') as mafi:
-        as_seen = pickle.load(mafi)
-    for l,lvl in enumerate(target_levels):
-        mu_vec = np.arange(-15,np.round(target_levels_s[l]*0.2))
-        dataL = prepare_data(lvl, data_flat)
-        nS = np.round(target_levels_s[l]*1.2)
-        for mu in mu_vec:
-            sd_vec = np.arange(1, min(nS-mu,15))
-            for s in range(len(dataL)):
-                tmp_logli,_,_,_,_,_ = infer_parameters(data = dataL[s],
-                                    as_seen = as_seen, normalize = False,
-                                    shape_pars = ['unimodal_s', [mu], sd_vec])
-                for sd in range(len(sd_vec)):
-                    logli[('unimodal_s', s, lvl, mu, sd_vec[sd])] = tmp_logli[0,sd]
-
-    # Begin with sigmoid
-    with open('./data/posteriors_subj_sigmoid_s.pi', 'rb') as mafi:
-        as_seen = pickle.load(mafi)
-    cutoff_point = 0.95
-    for l, lvl in enumerate(target_levels):
-        mu_vec = np.arange(-15,15)
-        dataL = prepare_data(lvl, data_flat)
-        nS = np.round(target_levels_s[1]*1.2)
-        for mu in mu_vec:
-            possible_slopes = np.arange(1,30,2)
-#            possible_slopes = np.hstack([possible_slopes, 31])
-            slope_min = 10*np.log(1/cutoff_point - 1)/(mu + target_levels_s[l] - nS)
-            slope_av_min = np.searchsorted(possible_slopes, slope_min, side='right')
-            if slope_av_min >= len(possible_slopes)-1:
-                continue
-            slope_vec = np.arange(possible_slopes[slope_av_min], 30, 2)
-            for s in range(len(dataL)):
-                tmp_logli,_,_,_,_,_ = infer_parameters(data = dataL[s],
-                                        as_seen = as_seen, normalize = False,
-                                        shape_pars = ['sigmoid_s',[mu],slope_vec])
-                for sl in range(len(slope_vec)):
-                    logli[('sigmoid_s', s, lvl, mu, slope_vec[sl])] = tmp_logli[0,sl]
-
-    with open('./data/posteriors_subj_exponential.pi', 'rb') as mafi:
-        as_seen = pickle.load(mafi)
-    for l, lvl in enumerate(target_levels):
-        exp_vec = np.arange(5,100,2)
-        dataL = prepare_data(lvl, data_flat)
-        nS = np.round(target_levels_s[l]*1.2)
-        for s in range(len(dataL)):
-            tmp_logli, _,_,_,_,_ = infer_parameters(data = dataL[s],
-                                        as_seen = as_seen, normalize = False,
-                                        shape_pars = ['exponential',  exp_vec])
-        for ex in range(len(exp_vec)):
-            logli[('exponential', s, lvl, exp_vec[ex])] = tmp_logli[0,ex]
-
-
-    if retorno:
-        return logli
-    else:
-        with open('./logli_all_shapes.pi', 'wb') as mafi:
-            pickle.dump(logli, mafi)
-
-def plot_three_shapes(logli, shapes = None, norm_const = 1, fignum = 15, normalize_together = False):
-    """ Plots the dictionary from the three_shapes() method.
-
-    Parameters
-    ----------
-    logli: dictionary, keys={shape,subj, thres, par1, par2}
-        Contains the log-likelihoods of each key.
-    shapes: list of str
-        Which shapes are contained in the data. If not provided, it is inferred
-        from the data itself.
-    norm_const, int
-        Controls the maximum alpha that any given lnC can have. The idea is that for
-        logli data that spans many subjects, this number is set to the number of
-        subjects or something like that.
-
-
-    """
-    import betClass as bc
-    from matplotlib import pyplot as plt
-    import matplotlib.gridspec as gs
-
-    target_levels = [595,930,1035,1105]
-    tl_dict = {595:0, 930:1, 1035:2, 1105:3}
-
-    mabes = {}
-    for lvl in target_levels:
-        thres = np.round(lvl/10).astype(int)
-        nS = np.round(1.2*thres).astype(int)
-        mabes[lvl] = bc.betMDP(thres = thres, nS = nS)
-
-    # find the maxima to normalize the alpha:
-    plots_set = set()
-    if shapes is None: # See which shapes are included in the logli data
-        for key in logli.keys():
-            plots_set.add(key[0])
-    plots = {}
-    for t,thing in enumerate(plots_set):
-        plots[thing] = t
-
-#    plots = {'unimodal_s':0, 'sigmoid_s':1, 'exponential':2}
-
-    outer_grid = gs.GridSpec(1, len(plots))
-
-    max_likelihoods = -np.inf*np.ones((len(plots), 4))
-    for key in logli.keys():
-        max_likelihoods[plots[key[0]], tl_dict[key[2]]] = max(max_likelihoods[plots[key[0]], tl_dict[key[2]]], logli[key])
-    max_likelihoods = np.exp(max_likelihoods)
-    if normalize_together:
-        max_likelihoods = np.tile(max_likelihoods.max(axis=0),(len(plots),1))
-    fig = plt.figure(fignum)
-    fig.clf()
-    lnC = [0] # For cases in which not all shapes have data in logli
-    for sh in plots.keys():
-        for lvl in target_levels:
-            inner_grid = gs.GridSpecFromSubplotSpec(4,1, subplot_spec = outer_grid[plots[sh]])
-            ax = plt.Subplot(fig, inner_grid[tl_dict[lvl]])
-            for key in logli.keys():
-        #        plt.subplot(1,2,plots[key[0]])
-                if key[2] == lvl and key[0] == sh:
-                    lnC = mabes[key[2]].set_prior_goals(selectShape=key[0],
-                                     shape_pars = key[3:], convolute = False,
-                                     cutoff = False, just_return = True)
-                    ax.plot(lnC, color='black', alpha = np.exp(logli[key])/max_likelihoods[plots[key[0]], tl_dict[key[2]]]/norm_const)
-
-            ax.coordinates = [plots[sh], tl_dict[lvl]]
-            ticks = ax.get_yticks()
-            ymax = ticks[-1]
-            ax.set_yticks([])
-            ax.set_xlim([0,len(lnC)])
-            ax.plot([lvl/10, lvl/10], [0, ymax], color='r', linewidth = 3, alpha = 0.5)
-            fig.add_subplot(ax)
-
-    for ax in fig.get_axes():
-        if ax.coordinates[0] == 0:
-            ax.set_ylabel('threshold:\n %s' % target_levels[ax.rowNum], fontsize=8)
-#        ax.set_xticklabels(ax.get_xticklabels(), fontsize=8)
-        if ax.rowNum == 3:
-            ax.set_xlabel('Points')
-        if ax.rowNum == 0:
-            ax.set_title(['Gaussian', 'Sigmoid'][ax.coordinates[0]])
-    fig.suptitle('Likelihood for different shapes of priors over final state (goals)')
-    plt.savefig('./logli.png', dpi = 300)
 
 def main(data_type, shape_pars, subject = 0, data_flat = None,
          threshold = None, games = 20, trials = None, sim_mu = None, sim_sd = None,
@@ -992,7 +820,6 @@ if __name__ == '__main__':
     import argparse
     from os import getpid
     import sys
-    import numpy as np
 
     print('pid: %s' % getpid())
 

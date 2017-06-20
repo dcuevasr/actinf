@@ -269,3 +269,11 @@ if __name__ == "__main__":
     small = small_data(data_flat, 10)
     small_prune = prune_trials(small, [0,1,2])
     prune = prune_trials(data_flat, [0,1,2])
+
+# def testing_inference_simulated(force_data = False):
+#     """ Little scripts for generating simulated behavioral data and performing
+#     inference on it to see how actinf behaves.
+#     """
+#     import invert_parameters as invp
+
+#     data_flat = invp.simulate_data_4_conds(['sigmoid_s', -3, 10]

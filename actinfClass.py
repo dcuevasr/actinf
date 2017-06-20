@@ -188,8 +188,6 @@ class Actinf(object):
             P[j] = np.sum(u[w[utils.ismember(V[:,t],j)]])
 
 
-#        print(P, flush=True)
-#        raise Exception('stooooop')
         if PreUpd is True:
             return x, P, precisionUpdates
         else:
