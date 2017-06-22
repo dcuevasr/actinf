@@ -1365,9 +1365,10 @@ def plot_rp_vs_risky(as_seen = None, fignum = 17, subjects = None, savefig=False
     mafu = lambda x,a,b: a*x + b
     for s in subjects:
 
-        logli, posta, _, _, _, _ = invp.infer_parameters(as_seen = as_seen, normalize = False,
-                                                     shape_pars = ['unimodal_s',np.arange(-15,20), np.arange(1,15)],
-                                                     data = data_flat[s])
+        logli, posta, _, _, _, _ = invp.infer_parameters(
+                 as_seen = as_seen, normalize = False,
+                 shape_pars = ['unimodal_s',np.arange(-15,20), np.arange(1,15)],
+                 data = data_flat[s])
         max_model = np.unravel_index(logli.argmax(), logli.shape)
         datax = risk_p[s]
         datay = posta[max_model[0], max_model[1],:,1]
@@ -1377,17 +1378,19 @@ def plot_rp_vs_risky(as_seen = None, fignum = 17, subjects = None, savefig=False
         lin_x = np.arange(xmin,xmax, 0.1)
         lin_y = mafu(lin_x, *par_opt)
 
+        xticks = np.arange(0, np.ceil(xmax/10)*10+1, 10)
+
         ax = plt.subplot(s1,s2,s+1)
         ax.scatter(datax, datay, color='r', s=1)
         ax.plot(lin_x, lin_y, color='black', alpha=0.5)
         ax.set_xlim([0,80])
         ax.set_ylim([0,1])
         if ax.is_first_col() and ax.is_last_row():
-            ax.set_xlabel('Risk pressure', fontsize=8)
-            ax.set_ylabel('Probability of Risky', fontsize=8)
+            ax.set_xlabel('Risk pressure')
+            ax.set_ylabel('Probability of Risky')
 
-            ax.set_xticklabels(ax.get_xticks(), fontsize=8)
-            ax.set_yticklabels(ax.get_yticks(), fontsize=8)
+            ax.set_xticklabels(xticks.astype(int))
+            ax.set_yticklabels(ax.get_yticks())
         else:
             ax.set_xlabel('')
             ax.set_ylabel('')
@@ -1397,3 +1400,4 @@ def plot_rp_vs_risky(as_seen = None, fignum = 17, subjects = None, savefig=False
         plt.savefig('./risky.png', dpi=300)
     else:
         plt.show(block = False)
+

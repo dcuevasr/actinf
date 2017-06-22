@@ -19,7 +19,7 @@ class kolling(object):
         self.point_progression = []
         self.seen_pair = []
         self.all_orbs = {}
-
+        self.count_forb = 0
     def _action_pairs(self):
         nP = 8
         pL = np.array([90, 60, 75, 55, 90, 60, 75, 80], dtype=float)/100
@@ -39,10 +39,12 @@ class kolling(object):
         """ Returns, as a list of indices, the APs that haven't been seen."""
         return [x for x in np.arange(self.nP) if x not in self.seen_pair]
 
-    def reset_agent(self):
+    def reset_agent(self, hard = False):
         """ Resets the accumulated observations of the instance."""
         self.point_progression = []
         self.seen_pair = []
+        if hard:
+            self.all_orbs = {}
 
     def _all_actions(self, trial):
         """ Returns all combinations of 2 actions in trial trials."""
@@ -57,14 +59,13 @@ class kolling(object):
         if cpair not in np.arange(self.nT):
             raise ValueError('cpair must be an index between 0 and 7')
 
-        self.point_progression.append(cpoints)
-        self.seen_pair.append(cpair)
+
         opt_rb = 0
         max_points = 0
         for risk_bonus in np.arange(0, 1, 0.1):
             apt_left = self._ap_left()
             npoints = cpoints
-            for ap_seq in it.permutations(apt_left,self.nT - trial):
+            for ap_seq in it.permutations(apt_left,r = (self.nT - trial)):
                 for t in np.arange(len(ap_seq)):
                     pL = self.pL[ap_seq[t]]
                     pH = self.pH[ap_seq[t]]
@@ -76,6 +77,8 @@ class kolling(object):
                 if npoints > max_points:
                     max_points = npoints
                     opt_rb = risk_bonus
+        self.point_progression.append(cpoints)
+        self.seen_pair.append(cpair)
         return opt_rb
 
     def posterior_over_actions(self, trial, thres, cpoints, cpair, inv_temp):
@@ -85,8 +88,39 @@ class kolling(object):
         else:
             opt_rbs = self.find_optimal_risk_bonus(trial, thres, cpoints, cpair)
             self.all_orbs[(trial, cpair)] = opt_rbs
+#        opt_rbs = self.find_optimal_risk_bonus(trial, thres, cpoints, cpair)
 
         vL = self.pL[cpair]*self.rL[cpair] + opt_rbs*(1-self.pL[cpair])*self.rL[cpair]
         vH = self.pH[cpair]*self.rH[cpair] + opt_rbs*(1-self.pH[cpair])*self.rH[cpair]
         tmp_prob = np.exp([inv_temp*vL, inv_temp*vH])
         return tmp_prob/tmp_prob.sum()
+
+    def get_likelihood(self,subjects = None, inv_temp_vec = None):
+        """ Imports behavioral data and calculates the data likelihood for the
+        given model values.
+        """
+
+        import import_data as imda
+
+        data, _ = imda.main()
+
+        if subjects is None:
+            subjects = range(len(data))
+        elif isinstance(subjects, int):
+            subjects = subjects,
+
+        data = [data[s] for s in subjects]
+        logli = 0
+        for inv_temp in inv_temp_vec:
+            for s, datum in enumerate(data):
+                for g, game in enumerate(datum['points']):
+                    for t, points in enumerate(game):
+                        thres = datum['threshold'][g]
+                        cpair = datum['reihe'][g,t] - 1
+                        post_act = self.posterior_over_actions(t, thres,
+                                                       points, cpair, inv_temp)
+                        logli += np.log((datum['choice'][g,t]==0)*post_act[0] +
+                                       (datum['choice'][g,t]==1)*post_act[1])
+                    self.reset_agent()
+
+        return logli
