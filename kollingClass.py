@@ -56,16 +56,13 @@ class kolling(object):
 
     def find_optimal_risk_bonus(self, trial, thres, cpoints, cpair):
         """ Calculates the optimal risk bonus scale for the given context."""
-        if cpair not in np.arange(self.nT):
-            raise ValueError('cpair must be an index between 0 and 7')
-
 
         opt_rb = 0
         max_points = 0
-        for risk_bonus in np.arange(0, 1, 0.1):
+        for risk_bonus in np.arange(0, 1.1, 0.1):
             apt_left = self._ap_left()
-            npoints = cpoints
-            for ap_seq in it.permutations(apt_left,r = (self.nT - trial)):
+            for ap_seq in [apt_left]:#it.permutations(apt_left,r = (self.nT - trial)):
+                npoints = cpoints
                 for t in np.arange(len(ap_seq)):
                     pL = self.pL[ap_seq[t]]
                     pH = self.pH[ap_seq[t]]
@@ -74,28 +71,29 @@ class kolling(object):
                     vL = pL*rL + risk_bonus*(1-pL)*rL
                     vH = pH*rH + risk_bonus*(1-pH)*rH
                     npoints = npoints + rH*(vL < vH) + rL*(vL >= vH)
+
                 if npoints > max_points:
                     max_points = npoints
                     opt_rb = risk_bonus
         self.point_progression.append(cpoints)
-        self.seen_pair.append(cpair)
+#        self.seen_pair.append(cpair)
         return opt_rb
 
     def posterior_over_actions(self, trial, thres, cpoints, cpair, inv_temp):
         """ Calculate the posterior over actions with a softmax."""
-        if (trial, cpair) in self.all_orbs:
-            opt_rbs = self.all_orbs[(trial, cpair)]
-        else:
-            opt_rbs = self.find_optimal_risk_bonus(trial, thres, cpoints, cpair)
-            self.all_orbs[(trial, cpair)] = opt_rbs
-#        opt_rbs = self.find_optimal_risk_bonus(trial, thres, cpoints, cpair)
+#        if (trial, cpair) in self.all_orbs:
+#            opt_rbs = self.all_orbs[(trial, cpair)]
+#        else:
+#            opt_rbs = self.find_optimal_risk_bonus(trial, thres, cpoints, cpair)
+#            self.all_orbs[(trial, cpair)] = opt_rbs
+        opt_rbs = self.find_optimal_risk_bonus(trial, thres, cpoints, cpair)
 
         vL = self.pL[cpair]*self.rL[cpair] + opt_rbs*(1-self.pL[cpair])*self.rL[cpair]
         vH = self.pH[cpair]*self.rH[cpair] + opt_rbs*(1-self.pH[cpair])*self.rH[cpair]
         tmp_prob = np.exp([inv_temp*vL, inv_temp*vH])
         return tmp_prob/tmp_prob.sum()
 
-    def get_likelihood(self,subjects = None, inv_temp_vec = None):
+    def get_likelihood(self, subjects = None, inv_temp_vec = None, tini=0):
         """ Imports behavioral data and calculates the data likelihood for the
         given model values.
         """
@@ -110,17 +108,20 @@ class kolling(object):
             subjects = subjects,
 
         data = [data[s] for s in subjects]
-        logli = 0
+        logli = {}
         for inv_temp in inv_temp_vec:
+            logli[inv_temp] = 0
             for s, datum in enumerate(data):
                 for g, game in enumerate(datum['points']):
-                    for t, points in enumerate(game):
+                    game_ut = game[datum['points'][g,:]<datum['points'][g]]
+                    for t, points in enumerate(game_ut):
                         thres = datum['threshold'][g]
                         cpair = datum['reihe'][g,t] - 1
                         post_act = self.posterior_over_actions(t, thres,
                                                        points, cpair, inv_temp)
-                        logli += np.log((datum['choice'][g,t]==0)*post_act[0] +
-                                       (datum['choice'][g,t]==1)*post_act[1])
+
+                        logli[inv_temp] += np.log(post_act[0]**((datum['choice'][g,t]==0)*1) *
+                                       post_act[1]**((datum['choice'][g,t]==1)*1))
                     self.reset_agent()
 
         return logli
