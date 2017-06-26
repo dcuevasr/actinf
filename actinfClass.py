@@ -113,6 +113,10 @@ class Actinf(object):
         The input PreUpd decides whether the output should be the final
         value of precision (False) or the vector with all the updates for this
         trial (True).
+
+        Parameters
+        ----------
+        Observation: int
         """
 #        print PriorPrecision, self.gamma
         V = Policies
@@ -259,6 +263,7 @@ class Actinf(object):
             obs[t] = self.sampleNextObservation(sta[t])
             # Update beliefs over current state and posterior over actions
             # and precision
+            raise Exception
             bel[t,:], P[t,:], Gamma = self.posteriorOverStates(obs[t], t, wV,
                                                     PosteriorLastState,
                                                     PastAction,
@@ -562,84 +567,4 @@ class Actinf(object):
                 xS[v, t+1, :] = np.dot(B[V[v,t],:,:], xS[v, t, :])
 
         return xS[:, 1:, :]
-
-
-
-class MDPmodel(Actinf):
-    """ For compatibility with older implementations of tasks that might still
-    want to call with the old name.
-    """
-    def __init__(self, MDP):
-        super(MDPmodel,self).__init__(MDP)
-
-
-
-
-
-class CurrentState(object):
-    """ Holds the current state for active inference.
-    Both real states and inferred states can be represented with this class.
-    """
-    def __init__(self, nSr, nSi):
-        self.nSr = nSr
-        self.nSi = nSi
-        self.nStot = nSr * nSi
-
-    def separate_states(self, fullState, just_return = False):
-        """ Separates the current full state into relevant and irrelevant. It
-        is assumed that the first index to move is the relevant one; this means
-        that states 1 to nSr are taken to be all the relevant states for the
-        first value of the irrelevant states.
-
-        To separate, it is assumed that the probability of a given state is
-        given as the sum over all irrelevant states:
-        p(s^{rel}_x) = \displaystyle \sum _{n=1}^{N} p(s^{rel}_x, s^{irr}_n)
-
-        Equivalently for irrelevant states.
-        """
-        S = np.reshape(fullState,(self.nSr, self.nSi), order='F')
-        Sr = S.sum(axis=1)
-        Si = S.sum(axis=0)
-        if just_return is False:
-            self.Sr = Sr
-            self.Si = Si
-        else:
-            return Sr, Si
-
-    def join_states(self, relStates, irrStates, just_return = False):
-        """ Generates the full state from the current separated states. To
-        calculate the probability of any (Srel, Sirr) combined state, the
-        probabilities of the separated states are multiplied.
-
-        This implementation assumes that p(rel,irr) = p(rel)p(irr), which might
-        not be valid for a given generative model.
-
-        To calculate the joint state without setting it to self.S, use the
-        optional input just_return=True
-        """
-        # TODO: Add the possibility of calculating the joint states'
-        #       probabilities with another function.
-        S = np.matrix(relStates).T*np.matrix(irrStates)
-        S = np.reshape(S, (self.nStot,1), order='F')
-        if just_return is False:
-            self.S = S
-        else:
-            return S
-
-    def separate_actions(self, B, just_return = False):
-        """ Separates the transition matrices B into relevant and irrelevant.
-        """
-        nU = B.shape[0]
-
-        Brel = np.zeros((nU, self.nSr, self.nSr))
-        for u in range(nU):
-            for rel in range(self.nSr):
-                rel_indices = utils.allothers([range(self.nSr),[0]],
-                                              (self.nSr,self.nSr))
-                Brel[u,:,rel] = B[u, rel_indices, rel]
-        if just_return is False:
-            self.Brel = Brel
-        else:
-            return Brel
-
 
