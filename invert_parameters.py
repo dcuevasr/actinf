@@ -27,7 +27,7 @@ import itertools
 def _remove_above_thres(deci, trial, state, thres, reihe, multiplier = 1.2):
     """Removes any observation that goes above the cutoff. """
 
-    indices = state < np.array(multiplier*thres, dtype=int)
+    indices = state < np.round(multiplier*thres)
     return (deci[indices], trial[indices], state[indices], thres[indices],
             reihe[indices])
 
@@ -449,7 +449,7 @@ def simulate_data_4_conds(shape_pars):
 def _shift_states(states, thres, reihe, multiplier = 1.2):
     """ 'convolves' the states from the data with the 8 action pairs."""
     for s, sta in enumerate(states):
-        states[s] = (sta + multiplier*thres[s]*(reihe[s]-1)).astype(int)
+        states[s] = (sta + np.round(multiplier*thres[s])*(reihe[s]-1)).astype(int)
 
 def _calculate_likelihood(deci, posta_inferred, aux_big_index):
     "Generalization of the one above"""

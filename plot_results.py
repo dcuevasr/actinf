@@ -1353,6 +1353,7 @@ def prepare_data_for_agent(data_flat):
         thres = np.round(thres/10).astype(int)
         deci, trial, state, thres, reihe = invp._remove_above_thres(deci, trial,
                                                         state, thres, reihe)
+
         invp._shift_states(state, thres, reihe)
 
 
@@ -1407,6 +1408,10 @@ def simulate_with_agent(context, shape_pars):
 
     return posta
 
+def get_context_rp(context):
+    """ Gets risk pressure for all rows of --context--."""
+    nT = 8
+    return (context[:,2] - context[:,0]%(np.round(1.2*context[:,2])))/(nT - context[:,1])
 
 def plot_rp_vs_risky(as_seen = None, fignum = 17, subjects = None, savefig=False):
     """ Plots risk pressure vs probability of choosing the risky offer as a scatter plot."""
