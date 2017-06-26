@@ -93,8 +93,8 @@ class kolling(object):
         tmp_prob = np.exp([inv_temp*vL, inv_temp*vH])
         return tmp_prob/tmp_prob.sum()
 
-    def get_likelihood(self, subjects = None, inv_temp_vec = None,
-                       threshold=None):
+
+    def get_likelihood(self,subjects = None, inv_temp_vec = None, threshold = None):
         """ Imports behavioral data and calculates the data likelihood for the
         given model values.
         """
@@ -102,6 +102,17 @@ class kolling(object):
         import import_data as imda
 
         data, _ = imda.main()
+
+
+        if threshold is not None:
+            for datum in data:
+                target_thres = datum['TargetLevels'][threshold]
+                indices = datum['threshold']==target_thres
+                datum['TargetLevels'] = np.array((target_thres,))
+                for field in ['obs','choice','reihe', 'trial', 'points']:
+                    datum[field] = datum[field][indices,:]
+                datum['threshold'] = datum['threshold'][indices]
+
 
         if subjects is None:
             subjects = range(len(data))
