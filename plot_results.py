@@ -1337,6 +1337,76 @@ def plot_inferred_shapes(data_flat, as_seen, shape_pars, shape_pars_r = None,
             figname = './fig%s.png' % fignum
         plt.savefig(figname, dpi=300)
 
+def prepare_data_for_agent(data_flat):
+    """ Changes the format of the data from data_flat to --context--, as
+     expected by simulate_with_agent() below.
+    """
+    import numpy as np
+    import invert_parameters as invp
+    context = []
+
+    for datum in data_flat:
+        deci, trial, state, thres, reihe = (datum['choice'], datum['trial'],
+                                            datum['obs'], datum['threshold'],
+                                            datum['reihe'])
+        state = np.round(state/10).astype(int)
+        thres = np.round(thres/10).astype(int)
+        deci, trial, state, thres, reihe = invp._remove_above_thres(deci, trial,
+                                                        state, thres, reihe)
+        invp._shift_states(state, thres, reihe)
+
+
+        for t in range(len(deci)):
+            context.append([state[t], trial[t], thres[t]])
+    return np.array(context, dtype=int)
+
+def simulate_with_agent(context, shape_pars):
+    """ Calculates the posterior over actions for all the observations in
+    --context-- with the agent created with the parameters in --shape_pars--.
+
+    Parameters
+    ----------
+    context: np.array
+        2D array containing an observation in each row, with the columns
+        representing: points, trial, threshold.
+        Note: it is checked whether Threshold is in 100s or 1000s, and adjusted
+              to 100s if necessary.
+    shape_pars: list
+        List with the following elements:
+            Shape name. As found in betClass.set_prior_goals().
+            Parameter values. One element of the list for each parameters,
+                as ordered in betClass.set_prior_goals().
+    """
+    import betClass as bc
+    import numpy as np
+    from itertools import product as itprod
+
+    target_lvls = (np.round(np.array([595, 930, 1035, 1105])/10)).astype(int)
+
+    # Check if threshold is in 100s or 1000s. Adjust to 100s.
+    if context[0,2]>200:
+        context[:,2] = (np.round(context[:,2]/10)).astype(int)
+
+    mabes = {}
+    dummy_QS = {}
+    for tl in target_lvls:
+        mabes[tl] = bc.betMDP(thres = tl, nS = np.round(1.2*tl))
+        mabes[tl].set_prior_goals(selectShape=shape_pars[0],
+                                  shape_pars = shape_pars[1:], cutoff=False)
+        dummy_QS[tl] = mabes[tl].S
+        nT = mabes[tl].nT
+    wV = {}
+    for t in range(nT):
+        wV[t] = np.array(list(itprod([0,1], repeat=nT-t)))
+
+    posta = np.zeros((context.shape[0],2))
+    for n,obs in enumerate(context):
+        _, posta[n,:], _ = mabes[obs[2]].posteriorOverStates(obs[0], obs[1],
+                                               wV[obs[1]], dummy_QS[obs[2]],
+                                               0, 1)
+
+    return posta
+
 
 def plot_rp_vs_risky(as_seen = None, fignum = 17, subjects = None, savefig=False):
     """ Plots risk pressure vs probability of choosing the risky offer as a scatter plot."""

@@ -48,6 +48,14 @@ class betMDP(afc.Actinf):
         Additionally, calls setMDPMultVar() or setMDP, depending on inputs, to
         set all the MDP matrices for Active Inference.
         """
+        if nS is not None:
+            nS = int(nS)
+        if nT is not None:
+            nT = int(nT)
+        if thres is not None:
+            thres = int(thres)
+
+
         if paradigm == 'kolling':
             self.paradigm = 'kolling'
             self.pdivide = 1

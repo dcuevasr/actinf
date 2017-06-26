@@ -93,7 +93,8 @@ class kolling(object):
         tmp_prob = np.exp([inv_temp*vL, inv_temp*vH])
         return tmp_prob/tmp_prob.sum()
 
-    def get_likelihood(self, subjects = None, inv_temp_vec = None, tini=0):
+    def get_likelihood(self, subjects = None, inv_temp_vec = None,
+                       threshold=None):
         """ Imports behavioral data and calculates the data likelihood for the
         given model values.
         """
@@ -108,20 +109,32 @@ class kolling(object):
             subjects = subjects,
 
         data = [data[s] for s in subjects]
+
+        if threshold is not None:
+            for datum in data:
+                target_thres = datum['TargetLevels'][threshold]
+                indices = datum['threshold']==target_thres
+                datum['TargetLevels'] = np.array((target_thres,))
+                for field in ['obs','choice','reihe', 'trial']:
+                    datum[field] = datum[field][indices,:]
+                datum['threshold'] = datum['threshold'][indices]
+
         logli = {}
         for inv_temp in inv_temp_vec:
             logli[inv_temp] = 0
             for s, datum in enumerate(data):
-                for g, game in enumerate(datum['points']):
-                    game_ut = game[datum['points'][g,:]<datum['points'][g]]
+                for g, game in enumerate(datum['obs']):
+                    game_ut = game[datum['obs'][g,:]<datum['threshold'][g]]
+#                    print(len(game_ut))
+#                    game_ut = game
                     for t, points in enumerate(game_ut):
                         thres = datum['threshold'][g]
                         cpair = datum['reihe'][g,t] - 1
                         post_act = self.posterior_over_actions(t, thres,
                                                        points, cpair, inv_temp)
-
-                        logli[inv_temp] += np.log(post_act[0]**((datum['choice'][g,t]==0)*1) *
-                                       post_act[1]**((datum['choice'][g,t]==1)*1))
+                        logli[inv_temp] += (
+                            np.log(post_act[0]**((datum['choice'][g,t]==0)*1)*
+                            post_act[1]**((datum['choice'][g,t]==1)*1)))
                     self.reset_agent()
 
         return logli
