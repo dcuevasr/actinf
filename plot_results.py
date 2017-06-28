@@ -1483,7 +1483,7 @@ def plot_rp_vs_risky(as_seen = None, fignum = 17, subjects = None, savefig=False
         plt.show(block = False)
 
 def invert_and_compare(nReps = 10, shape_pars = None, thres_ix = 1,
-                       nGames = 12, noise = 1):
+                       nGames = 12, noise = 1, inv_temp = 0):
     """ Picks random model parameters for active inference, simulates data
     for an entire subject (4 conditions, 12 mini-blocks per condition, 8
     trials per mini-block) and finds the log-likelihood of the model used to
@@ -1518,8 +1518,11 @@ def invert_and_compare(nReps = 10, shape_pars = None, thres_ix = 1,
             if cPosta.sum() == 0:
                 cPosta = np.array([0.5,0.5])
             # add noise
+            if inv_temp != 0:
+                cPosta += inv_temp
+                cPosta /= cPosta.sum()
             if noise != 0:
-                cPosta = cPosta+noise
+                cPosta += noise*np.random.rand(2)
                 cPosta /= cPosta.sum()
             logli[rep] += np.random.choice(np.log(cPosta), p = cPosta)
     return logli
