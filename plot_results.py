@@ -1482,7 +1482,8 @@ def plot_rp_vs_risky(as_seen = None, fignum = 17, subjects = None, savefig=False
     else:
         plt.show(block = False)
 
-def invert_and_compare(nReps = 10, shape_pars = None, thres_ix = 1, nGames = 12):
+def invert_and_compare(nReps = 10, shape_pars = None, thres_ix = 1,
+                       nGames = 12, noise = 0):
     """ Picks random model parameters for active inference, simulates data
     for an entire subject (4 conditions, 12 mini-blocks per condition, 8
     trials per mini-block) and finds the log-likelihood of the model used to
@@ -1498,6 +1499,8 @@ def invert_and_compare(nReps = 10, shape_pars = None, thres_ix = 1, nGames = 12)
         shape_pars = ['unimodal_s', 5, 3]
     thres = target_lvl[thres_ix]
     mabe = bc.betMDP(thres = thres, nS = np.round(1.2*thres))
+    mabe.set_prior_goals(selectShape=shape_pars[0], shape_pars = shape_pars[1:],
+                         convolute=True, cutoff = False, just_return = False)
 
     nT = mabe.nT
     posta = np.zeros((nGames*nT, 2))
