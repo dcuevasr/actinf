@@ -1482,23 +1482,37 @@ def plot_rp_vs_risky(as_seen = None, fignum = 17, subjects = None, savefig=False
     else:
         plt.show(block = False)
 
-def invert_and_compare(nReps = 10, shape_pars = None):
+def invert_and_compare(nReps = 10, shape_pars = None, thres_ix = 1, nGames = 12):
     """ Picks random model parameters for active inference, simulates data
     for an entire subject (4 conditions, 12 mini-blocks per condition, 8
     trials per mini-block) and finds the log-likelihood of the model used to
     generate the data.
     """
     import numpy as np
-    import pickle
-    import invert_parameters as invp
+    import betClass as bc
 
-    shape_pars = ['unimodal_s', 5, 3]
-    shape_pars_inv = ['unimodal_s', [5], [3]]
-    logli = {}
+    target_levels = np.array([595, 930, 1035, 1105])
+    target_lvl = np.round(target_levels/10).astype(int)
+
+    if shape_pars is None:
+        shape_pars = ['unimodal_s', 5, 3]
+    thres = target_lvl[thres_ix]
+    mabe = bc.betMDP(thres = thres, nS = np.round(1.2*thres))
+
+    nT = mabe.nT
+    posta = np.zeros((nGames*nT, 2))
+
+    # Generate posteriors
+    for n in range(nGames):
+        mabe.exampleFull()
+        posta[n*nT:(n+1)*nT, :] = mabe.Example['PostActions']
+
+    # Generate data
+#    choice = np.zeros(nReps)
+    logli = np.zeros(nReps)
     for rep in range(nReps):
-        data_flat, mabe = invp.simulate_data_4_conds(shape_pars, return_mabe = True)
-        logli[rep],_,_,_,_,_ = invp.infer_parameters(shape_pars = shape_pars_inv,
-                                           data = data_flat[0],
-                                           normalize = False, as_seen = {})
-
+        for t, cPosta in enumerate(posta):
+            if cPosta.sum() == 0:
+                cPosta = np.array([0.5,0.5])
+            logli[rep] += np.random.choice(np.log(cPosta), p = cPosta)
     return logli
