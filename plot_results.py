@@ -1519,7 +1519,7 @@ def invert_and_compare(nReps = 10, shape_pars = None, thres_ix = 1,
                 cPosta = np.array([0.5,0.5])
             # add noise
             if noise != 0:
-                cPosta = cPosta*noise
+                cPosta = cPosta+noise
                 cPosta /= cPosta.sum()
             logli[rep] += np.random.choice(np.log(cPosta), p = cPosta)
     return logli
