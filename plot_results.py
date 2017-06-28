@@ -1522,7 +1522,7 @@ def invert_and_compare(nReps = 10, shape_pars = None, thres_ix = 1,
                 cPosta += inv_temp
                 cPosta /= cPosta.sum()
             if noise != 0:
-                cPosta += noise*np.random.rand(2)
+                cPosta += -noise+ 2*noise*np.random.rand(2)
                 cPosta /= cPosta.sum()
             logli[rep] += np.random.choice(np.log(cPosta), p = cPosta)
     return logli
