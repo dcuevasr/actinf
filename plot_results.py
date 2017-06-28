@@ -159,6 +159,11 @@ def plot_by_thres(shape_pars = None, subjects = None, trials = None, fignum = 4,
         Prior distribution over model parameters. It should contain a key for
         each threshold level (usually 4). Each value should be a numpy array
         the size of the parameter space (60x15, usually).
+
+    Returns
+    -------
+    likeli_out: dict
+        Dictionary with the loglikelihoods for all (subject, threshold) pairs.
     """
     import matplotlib.gridspec as gridspec
     import invert_parameters as invp
@@ -209,7 +214,7 @@ def plot_by_thres(shape_pars = None, subjects = None, trials = None, fignum = 4,
 #    yvec = np.arange(*mu_range)
     yticks = [0, int(ylen/2), ylen]
     yticklabels = [yvec[0], yvec[yticks[1]], yvec[-1]]
-
+    likeli_out = {}
     for s in range(nSubs):
         inner_grid = gridspec.GridSpecFromSubplotSpec(4,1,
                               subplot_spec = outer_grid[s], hspace=0.0,
@@ -225,7 +230,7 @@ def plot_by_thres(shape_pars = None, subjects = None, trials = None, fignum = 4,
                                   data_flat = data_flat,
                                   trials = trials, as_seen = as_seen,
                                   return_results=True, normalize = False)
-
+            likeli_out[(s, th)] = likeli
             ax.imshow(np.exp(likeli[subjects[s]])*priors[th], aspect=0.25,
                       interpolation='none')
 
@@ -276,6 +281,7 @@ def plot_by_thres(shape_pars = None, subjects = None, trials = None, fignum = 4,
 #            ax.set_title('')
     plt.tight_layout()
     plt.show()
+    return likeli_out
 
 def select_by_rp(rp_lims, trials = None):
     """ Will select the obs that meet the requirement of having a so-and-so
@@ -1476,3 +1482,23 @@ def plot_rp_vs_risky(as_seen = None, fignum = 17, subjects = None, savefig=False
     else:
         plt.show(block = False)
 
+def invert_and_compare(nReps = 10, shape_pars = None):
+    """ Picks random model parameters for active inference, simulates data
+    for an entire subject (4 conditions, 12 mini-blocks per condition, 8
+    trials per mini-block) and finds the log-likelihood of the model used to
+    generate the data.
+    """
+    import numpy as np
+    import pickle
+    import invert_parameters as invp
+
+    shape_pars = ['unimodal_s', 5, 3]
+    shape_pars_inv = ['unimodal_s', [5], [3]]
+    logli = {}
+    for rep in range(nReps):
+        data_flat, mabe = invp.simulate_data_4_conds(shape_pars, return_mabe = True)
+        logli[rep],_,_,_,_,_ = invp.infer_parameters(shape_pars = shape_pars_inv,
+                                           data = data_flat[0],
+                                           normalize = False, as_seen = {})
+
+    return logli

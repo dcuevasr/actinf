@@ -263,7 +263,6 @@ class Actinf(object):
             obs[t] = self.sampleNextObservation(sta[t])
             # Update beliefs over current state and posterior over actions
             # and precision
-            raise Exception
             bel[t,:], P[t,:], Gamma = self.posteriorOverStates(obs[t], t, wV,
                                                     PosteriorLastState,
                                                     PastAction,
@@ -386,8 +385,8 @@ class Actinf(object):
         self.oQ = []
         self.oV = []
         self.oH = []
-
-        sta[0] = np.nonzero(self.S)[0][0]
+        if sta is None:
+            sta[0] = np.nonzero(self.S)[0][0]
         # Some dummy initial values:
         PosteriorLastState = self.D
         PastAction = 1

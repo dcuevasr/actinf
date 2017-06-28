@@ -414,7 +414,7 @@ def simulate_data(shape_pars = None, num_games = 10, paradigm = None, nS = 100,
         stateV[n, st] = 1
     return mabes, deci, trial, state, thres, posta, preci, stateV, nD, nT
 
-def simulate_data_4_conds(shape_pars):
+def simulate_data_4_conds(shape_pars, return_mabe = False):
     """ Simulates data identical to the experimental data, in that there are
     4 conditions, 12 games. The format is as the output of import_data.main().
 
@@ -445,11 +445,15 @@ def simulate_data_4_conds(shape_pars):
 
     data_flat[0]['NumberGames'] = 48
     data_flat[0]['NumberTrials'] = 8
-    return data_flat
+    if return_mabe is True:
+        return data_flat, mabes
+    else:
+        return data_flat
 def _shift_states(states, thres, reihe, multiplier = 1.2):
     """ 'convolves' the states from the data with the 8 action pairs."""
     for s, sta in enumerate(states):
-        states[s] = (sta + np.round(multiplier*thres[s])*(reihe[s]-1)).astype(int)
+        states[s] = (sta + multiplier*thres[s]*(reihe[s]-1)).astype(int)
+#        states[s] = (sta + np.round(multiplier*thres[s])*(reihe[s]-1)).astype(int)
 
 def _calculate_likelihood(deci, posta_inferred, aux_big_index):
     "Generalization of the one above"""
