@@ -1556,15 +1556,17 @@ def likelihood_data(shape_pars, thres_ix = 0, subject = 0):
 
     target_levels = np.array([595, 930, 1035, 1105])
     target_lvl = np.round(target_levels/10).astype(int)
-    thres = target_lvl[thres_ix]
+    thres_sim = target_lvl[thres_ix]
 
-    mabe = bc.betMDP(thres = thres, nS = np.round(1.2*thres))
+    mabe = bc.betMDP(thres = thres_sim, nS = np.round(1.2*thres))
     mabe.set_prior_goals(shape_pars = shape_pars, cutoff = False)
 
     _, data_flat = imda.main()
 
     deci, trial, state, thres, reihe, = adapt_data(data_flat[subject])
     context = prepare_data_for_agent([data_flat[subject]])
+    context = context[context[:,2]==thres_sim, :]
+
     posta = simulate_with_agent(context, shape_pars)
 
     nD = posta.shape[0]
