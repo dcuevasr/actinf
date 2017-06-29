@@ -449,6 +449,16 @@ class betMDP(afc.Actinf):
         (Note: when just_return is False, nothing is returned)
         goals               [nS] are the resulting priors over last state.
         """
+
+        if shape_pars is not None:
+            if isinstance(shape_pars[0], str):
+                selectShape = shape_pars[0]
+                shape_pars = shape_pars[1:]
+
+#            for item in shape_pars:
+#                if isinstance(item, list):
+#                    item = item[0]
+
         if selectShape == 'flat':
             goals = self.prior_goals_flat(convolute, just_return = True)
         elif selectShape == 'ramp':

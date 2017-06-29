@@ -1367,6 +1367,23 @@ def prepare_data_for_agent(data_flat):
             context.append([state[t], trial[t], thres[t]])
     return np.array(context, dtype=int)
 
+def adapt_data(datum):
+    """ Extracts the data from dict, divides by 10, removes above maxS and
+    convolutes with the offers.
+    """
+    import invert_parameters as invp
+    deci, trial, state, thres, reihe = (datum['choice'], datum['trial'],
+                                        datum['obs'], datum['threshold'],
+                                        datum['reihe'])
+    state = np.round(state/10).astype(int)
+    thres = np.round(thres/10).astype(int)
+    deci, trial, state, thres, reihe = invp._remove_above_thres(deci, trial,
+                                                    state, thres, reihe)
+
+    invp._shift_states(state, thres, reihe)
+
+    return deci, trial, state, thres, reihe,
+
 def simulate_with_agent(context, shape_pars):
     """ Calculates the posterior over actions for all the observations in
     --context-- with the agent created with the parameters in --shape_pars--.
@@ -1482,7 +1499,7 @@ def plot_rp_vs_risky(as_seen = None, fignum = 17, subjects = None, savefig=False
     else:
         plt.show(block = False)
 
-def invert_and_compare(nReps = 10, shape_pars = None, thres_ix = 1,
+def likelihood_simulated(nReps = 10, shape_pars = None, thres_ix = 1,
                        nGames = 12, noise = 0, inv_temp = 0):
     """ Picks random model parameters for active inference, simulates data
     for an entire subject (4 conditions, 12 mini-blocks per condition, 8
@@ -1528,3 +1545,33 @@ def invert_and_compare(nReps = 10, shape_pars = None, thres_ix = 1,
                 cPosta /= cPosta.sum()
             logli[rep] += np.random.choice(np.log(cPosta), p = cPosta)
     return logli
+
+def likelihood_data(shape_pars, thres_ix = 0, subject = 0):
+    """ Gets experimental data and calculates the likelihood of the actinf
+    model given by shape_pars.
+    """
+    import betClass as bc
+    import import_data as imda
+    import numpy as np
+
+    target_levels = np.array([595, 930, 1035, 1105])
+    target_lvl = np.round(target_levels/10).astype(int)
+    thres = target_lvl[thres_ix]
+
+    mabe = bc.betMDP(thres = thres, nS = np.round(1.2*thres))
+    mabe.set_prior_goals(shape_pars = shape_pars, cutoff = False)
+
+    _, data_flat = imda.main()
+
+    deci, trial, state, thres, reihe, = adapt_data(data_flat[subject])
+    context = prepare_data_for_agent([data_flat[subject]])
+    posta = simulate_with_agent(context, shape_pars)
+
+    nD = posta.shape[0]
+
+    logli = 0
+    for d in range(nD):
+        logli += np.log(posta[d,0]**(deci[d]==0)*posta[d,1]**(deci[d]==1))
+
+    return logli, posta, context
+
