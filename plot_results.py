@@ -1558,7 +1558,7 @@ def likelihood_data(shape_pars, thres_ix = 0, subject = 0):
     target_lvl = np.round(target_levels/10).astype(int)
     thres_sim = target_lvl[thres_ix]
 
-    mabe = bc.betMDP(thres = thres_sim, nS = np.round(1.2*thres))
+    mabe = bc.betMDP(thres = thres_sim, nS = np.round(1.2*thres_sim))
     mabe.set_prior_goals(shape_pars = shape_pars, cutoff = False)
 
     _, data_flat = imda.main()

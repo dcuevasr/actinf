@@ -452,7 +452,7 @@ def simulate_data_4_conds(shape_pars, return_mabe = False):
 def _shift_states(states, thres, reihe, multiplier = 1.2):
     """ 'convolves' the states from the data with the 8 action pairs."""
     for s, sta in enumerate(states):
-        states[s] = (sta + multiplier*thres[s]*(reihe[s]-1)).astype(int)
+        states[s] = (sta + np.round(multiplier*thres[s])*(reihe[s]-1)).astype(int)
 #        states[s] = (sta + np.round(multiplier*thres[s])*(reihe[s]-1)).astype(int)
 
 def _calculate_likelihood(deci, posta_inferred, aux_big_index):
