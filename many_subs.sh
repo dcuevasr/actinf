@@ -7,13 +7,15 @@ then
 fi
 
 ARRAY="1-915"
-if [ $2 == 'sigmoid_s' ]; then
-    ARRAY="1-465"
-fi
-if [ $2 == 'exponential' ]; then
-    ARRAY="1-48"
-fi
-
+if [ $# -gt 1 ]; then
+    echo 'yo'
+    if [ $2 == 'sigmoid_s' ]; then
+	ARRAY="1-465"
+    fi
+    if [ $2 == 'exponential' ]; then
+	ARRAY="1-48"
+    fi
+fi 
 
 for s in $1;
 do
