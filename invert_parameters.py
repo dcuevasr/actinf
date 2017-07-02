@@ -33,7 +33,7 @@ def _remove_above_thres(deci, trial, state, thres, reihe, multiplier = 1.2):
 
 
 def infer_parameters(num_games = None, data = None, as_seen = None,
-                     normalize = True, shape_pars = None):
+                     normalize = False, shape_pars = None, return_Qs = False):
     r""" Calculates the likelihood for every model provided.
 
     Each model is created with different values of the mean and sd of a
@@ -101,6 +101,10 @@ def infer_parameters(num_games = None, data = None, as_seen = None,
                 np.unique(data['threshold']).
     normalize: bool
         Determines whether the likelihoods should be 'marginalized'.
+    return_Qs: bool
+        Whether or not to get the valuation over all action sequences from
+        the active inference class. #TODO: make compatible with as_seen.
+
 
     Returns
     -------
@@ -210,16 +214,22 @@ def infer_parameters(num_games = None, data = None, as_seen = None,
     tini = time()
 
     # Calculate data likelihood for all parameter values
-    posta_inferred = simulate_posteriors(as_seen, shape_pars,
+    out_posteriors = simulate_posteriors(as_seen, shape_pars,
                                          state, trial, thres,
-                                         arr_lnc, mabed, flag_write_posta, mu_sigma)
+                                         arr_lnc, mabed, flag_write_posta,
+                                         mu_sigma, return_Qs = return_Qs)
+    if return_Qs is not True:
+        posta_inferred = out_posteriors
+    else:
+        posta_inferred, Qs = out_posteriors
 
 
 
     print('Took: %d seconds.' % (time() - tini))
     atexit.unregister(_save_posteriors)
     if flag_write_posta is True:
-        _save_posteriors(posta_inferred, trial, state, thres, mu_sigma, aux_big_index)
+        _save_posteriors(posta_inferred, trial, state, thres, mu_sigma,
+                         aux_big_index, Qs = Qs)
     size_pa = size_ms[:-1]
     size_pa.append(NuData)
     size_pa.append(2)
@@ -245,9 +255,16 @@ def infer_parameters(num_games = None, data = None, as_seen = None,
     print('Finished. Have a nice day %s\n' % smiley)
     return prob_data, post_act, deci, trial, state, mu_sigma
 
-def simulate_posteriors(as_seen, shape_pars,
-                        state, trial, thres, arr_lnc, mabed, wflag, mu_sigma):
+def simulate_posteriors(as_seen, shape_pars, state, trial, thres, arr_lnc,
+                        mabed, wflag, mu_sigma, return_Qs = False):
     posta_inferred = {}
+    Qs = {} #used only if return_Qs is True
+    if return_Qs is True and as_seen != {}:
+        raise NotImplementedError(
+        """ Using return_Qs and a nonempty as_seen is
+          not yet implemented: the observations in
+          as_seen have not been modified to include the
+          potential of having the Qs too.""")
 #    from signal import signal, SIGTERM
     import itertools as it
     def _save_posteriors_local(signum, frame):
@@ -299,11 +316,16 @@ def simulate_posteriors(as_seen, shape_pars,
             posta_inferred[index] = as_seen[current_state]
         else:
             mabed[thres[s]].lnC = arr_lnc[index]
-            posta_inferred[index] = mabed[thres[s]].posteriorOverStates(state[s],
-                       trial[s], le_V[trial[s]], mabed[thres[s]].D, 0, 15)[1:3]
-
-
-    return posta_inferred
+            post_all = mabed[thres[s]].posteriorOverStates(state[s],
+                       trial[s], le_V[trial[s]], mabed[thres[s]].D, 0, 15,
+                            return_Qs = return_Qs)
+            posta_inferred[index] = post_all[1:3]
+            if return_Qs is True:
+                Qs[index] = post_all[2:]
+    if return_Qs is True:
+        return posta_inferred, Qs
+    else:
+        return posta_inferred
 def call_mabe(le_input):
     """ Wrapper to call mabe.posteriorOverStates. It needs to be on the main
     namespace to be pickable for pool.
@@ -467,7 +489,8 @@ def _calculate_likelihood(deci, posta_inferred, aux_big_index):
             likelihood_model[index] = np.sum(likelihood(deci, posta_inferred[index][:]))
     return likelihood_model
 
-def _save_posteriors(post_act, trial, state, thres, mu_sigma, aux_big_index):
+def _save_posteriors(post_act, trial, state, thres, mu_sigma, aux_big_index,
+                     Qs = None):
     """ Save the posterior over actions given the observations and other data.
     It first loads the data file again and adds to it whatever is in post_act;
     then it saves the file again with the added data.
@@ -480,6 +503,9 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma, aux_big_index):
     in the data. The keys are tuples (Mu, Sd, Observation, Trial Number,
     Threshold). Those parameters fully determine what the Active Inference
     posteriors over actions are, so the tuple is a good identifier.
+
+    If Qs is provided, a second file is created to save them in the same format
+    as the posteriors over actions.
     """
     import pickle
     import os
@@ -488,12 +514,17 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma, aux_big_index):
     # read data from file
 #    in_file  = './data/posteriors.pi'
     out_file = './data/out_%d.pi' % os.getpid()
+    q_out_file = './data/qut_%d.pi' % os.getpid()
     k = 0
     while os.path.isfile(out_file): #find file that doesn't exist. Stupid HPC
         out_file = './data/out_%d_%d.pi' % (os.getpid(), k)
         k += 1
-
+    k = 0
+    while os.path.isfile(q_out_file): #find file that doesn't exist. Stupid HPC
+        out_file = './data/qut_%d_%d.pi' % (os.getpid(), k)
+        k += 1
     data = {}
+    q_out = {}
     big_index = it.product(*aux_big_index)
     for index in big_index:
         st = index[-1]
@@ -506,8 +537,14 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma, aux_big_index):
             data[data_index] = post_act[index]
         except KeyError:
             raise
+        if Qs is not None:
+            q_out[data_index] = Qs[index]
     with open(out_file, 'wb') as mafi:
         pickle.dump(data, mafi)
+    if Qs is not None:
+        with open(q_out_file, 'wb') as mafi:
+            pickle.dump(q_out, mafi)
+
     print('Posteriors saved.')
 
 
@@ -691,7 +728,8 @@ def _create_data_flat(mabe, deci, trial, state, thres, nD, nT):
 
 def main(data_type, shape_pars, subject = 0, data_flat = None,
          threshold = None, games = 20, trials = None, sim_mu = None, sim_sd = None,
-         as_seen = None, return_results = True, normalize = True):
+         as_seen = None, return_results = True, normalize = False,
+         return_Qs = False):
     r""" main(data_type, subject, mu_range, sd_range [, games] [, trials]
               [, return_results])
 
@@ -736,6 +774,8 @@ def main(data_type, shape_pars, subject = 0, data_flat = None,
         When data_type = simulated, use this value for mu.
     sim_sd: int
         When data_type = simulated, use this value for sd.
+    return_Qs: bool
+        Whether or not to save the valuation over action sequences.
 
     Returns
     -------
@@ -816,7 +856,8 @@ def main(data_type, shape_pars, subject = 0, data_flat = None,
         (post_model[s], posta[s], deci[s], trial[s], state[s], mu_sigma[s]) = (
                                   infer_parameters(shape_pars = shape_pars,
                                   data=data_flat[s],
-                                  as_seen = as_seen, normalize = normalize))
+                                  as_seen = as_seen, normalize = normalize,
+                                  return_Qs = return_Qs))
     if return_results is True:
         return post_model, posta, deci, trial, state, mu_sigma
 
@@ -889,4 +930,4 @@ if __name__ == '__main__':
     sys.stdout.flush()
     main(data_type = ['full','pruned'], shape_pars = shape_pars,
          subject = args.subjects,
-         trials = trials, return_results = False)
+         trials = trials, return_results = False, return_Qs = True)

@@ -104,7 +104,8 @@ class Actinf(object):
 
     def posteriorOverStates(self, Observation, CurrentTime, Policies,
                             PosteriorLastState, PastAction,
-                            PriorPrecision, newB = None, PreUpd = False):
+                            PriorPrecision, newB = None, PreUpd = False,
+                            return_Qs = False):
         """
         Decision model for Active Inference. Takes as input the model
         parameters in MDP, as well as an observation and the prior over the
@@ -117,6 +118,38 @@ class Actinf(object):
         Parameters
         ----------
         Observation: int
+        CurrentTime: int
+        Policies: np.array, shape=(nV, nT)
+        PosteriorLastState: np.array, shape=(nS)
+        PastAction: int
+        PriorPrecision: float
+        newB: np.array, shape=(nActions, nS, nS)
+        PreUpd: bool
+            Whether to return the Precision or the precision updates (of which
+            the last equals the Precision).
+        return_Qs: bool
+            Whether to return the valuation of all the action sequences in
+            Policies.
+
+        Returns
+        -------
+        NOTE: Outputs are returned in the order listed here. All outputs with a
+              (#) next to their name will be "either/or".
+
+        x: np.array, shape=(nS)
+            Vector with the posteriors over states.
+        P: np.array, shape=(nActions)
+            Posteriors over actions
+        W(1): int
+            Precision. Note that if PreUpd is True, precisionUpdates is
+            returned instead of W.
+        precisionUpdates(1): np.array, shape=(self.N)
+            Precision updates for the current trial. The last one in the array
+            equals W above. Note that if PreUpd is True, precisionUpdates is
+            returned instead of W.
+        Q: np.array, shape=(nV)
+            Valuation of the different action sequences given in Policies. This
+            is only returned if return_Qs is True.
         """
 #        print PriorPrecision, self.gamma
         V = Policies
@@ -191,11 +224,17 @@ class Actinf(object):
         for j in range(self.Nu):
             P[j] = np.sum(u[w[utils.ismember(V[:,t],j)]])
 
+        list_return = [x, P]
 
         if PreUpd is True:
-            return x, P, precisionUpdates
+            list_return.append(precisionUpdates)
         else:
-            return x, P, W
+            list_return.append(W)
+
+        if return_Qs is True:
+            list_return.append(Q)
+
+        return list_return
 
     def sampleNextState(self,CurrentState, PosteriorAction):
         """
