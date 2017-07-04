@@ -105,7 +105,7 @@ def infer_parameters(num_games = None, data = None, as_seen = None,
         Whether or not to get the valuation over all action sequences from
         the active inference class. #TODO: make compatible with as_seen.
 
-
+ 
     Returns
     -------
     prob_data: np.array([nMu, nSd]), dtype = float
@@ -724,8 +724,8 @@ def _create_data_flat(mabe, deci, trial, state, thres, nD, nT):
     data_flat['trial'] = trial
     return [data_flat]
 
-def calculate_posta_from_Q(gamma, old_gamma = 64, data = None,
-                           Qs = './data/qs.pi'):
+def calculate_posta_from_Q(alpha, old_alpha = 64, data = None,
+                           Qs = './data/qs.pi', guardar = True, regresar = False):
     """ Calculates the posteriors over actions given the Qs of a previous run,
     the old value of gamma and a new value of gamma.
 
@@ -733,15 +733,30 @@ def calculate_posta_from_Q(gamma, old_gamma = 64, data = None,
     """
     import pickle
     from itertools import product as itprod
-    V = np.array(list(itprod([0,1],repeat = 8)))
+
 
     if isinstance(Qs, str):
         with open(Qs, 'rb') as mafi:
             Qs = pickle.load(mafi)
+
+    ratio = alpha/old_alpha
     posta = {}
     for key in Qs.keys():
-        cQs = Qs[key][-1]
-        expQ = np.exp(cGamma*cQs)
+        t = key[-2]
+        V = np.array(list(itprod([0,1],repeat = 8-t)))
+        cQs = Qs[key][1]
+        cGa = Qs[key][0]
+        mGa = ratio*cGa
+        expQ = np.exp(mGa*cQs)
+        posta[key] = [np.array([expQ[V[:,0]==0].sum(), expQ[V[:,0]==1].sum()]), mGa]
+        posta[key][0] /= posta[key][0].sum()
+
+    if guardar is True:
+        with open('./posteriors_subj_uni_s_A%d.pi' % alpha, 'wb') as mafi:
+            pickle.dump(posta, mafi)
+    if regresar is True:
+        return posta
+    
 
 def find_files_subject(subject, logs_path, outs_path, quts_path):
     """ Using the logs, finds the out and qut files that contain infor for a 
