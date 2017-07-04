@@ -220,6 +220,7 @@ def infer_parameters(num_games = None, data = None, as_seen = None,
                                          mu_sigma, return_Qs = return_Qs)
     if return_Qs is not True:
         posta_inferred = out_posteriors
+        Qs = None
     else:
         posta_inferred, Qs = out_posteriors
 
@@ -449,7 +450,7 @@ def simulate_data_4_conds(shape_pars, return_mabe = False):
     import numpy as np
 
 
-    target_levels = np.array([595, 930, 1035, 1105])
+    targes<t_levels = np.array([595, 930, 1035, 1105])
     target_lvls = np.round(target_levels/10).astype(int)
 
     tmp_data = {}
@@ -521,7 +522,7 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma, aux_big_index,
         k += 1
     k = 0
     while os.path.isfile(q_out_file): #find file that doesn't exist. Stupid HPC
-        out_file = './data/qut_%d_%d.pi' % (os.getpid(), k)
+        q_out_file = './data/qut_%d_%d.pi' % (os.getpid(), k)
         k += 1
     data = {}
     q_out = {}
