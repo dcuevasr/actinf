@@ -743,7 +743,69 @@ def calculate_posta_from_Q(gamma, old_gamma = 64, data = None,
         cQs = Qs[key][-1]
         expQ = np.exp(cGamma*cQs)
 
+def find_files_subject(subject, logs_path, outs_path, quts_path):
+    """ Using the logs, finds the out and qut files that contain infor for a 
+    given subject.
+    """
+    import os
+    import re
 
+    list_outs = str(os.listdir(outs_path))
+    list_quts = str(os.listdir(quts_path))
+    
+    out_files = []
+    qut_files = []
+    for file in os.listdir(logs_path):
+        with open(logs_path + file, 'r') as mafi:
+            text = mafi.read()
+            re1 = re.compile(r'Subjects[ a-z]*: \[[0-9]\]')
+            re2 = re.compile(r'[0-9][0-9]*')
+            csub = re2.findall(re1.findall(text)[0])[0]
+            if int(csub) == subject:
+                re3 = re.compile(r'pid: [0-9][0-9]*')
+                re4 = re.compile(r'[0-9][0-9]*')
+                cpid = re4.findall(re3.findall(text)[0])[0]
+                re5o = re.compile(r'out_%s[_0-9]*.pi' % cpid)
+                re5q = re.compile(r'qut_%s[_0-9]*.pi' % cpid)
+                out_found = re5o.findall(list_outs)
+                qut_found = re5q.findall(list_quts)
+                for fo in out_found:
+                    out_files.append(fo)
+                for fq in qut_found:
+                    qut_files.append(fq)
+
+    return out_files, qut_files
+
+def create_Q_file_subject(subject, logs_path = None, outs_path = None,
+                          quts_path = None, output_file = None):
+    """ Creates a .pi files with all the Qs and Gammas for one subject, all
+    observations.
+    """
+    import pickle
+    from os.path import isfile
+    
+    if logs_path is None:
+        logs_path = '/home/dario/Proj_ActiveInference/results/logs_qs/'
+    if outs_path is None:
+        outs_path = '/home/dario/Proj_ActiveInference/results/posta_qs/'
+    if quts_path is None:
+        quts_path = outs_path
+    if output_file is None:
+        output_file = './data/qus_subj_%d.pi' % subject
+        k = 0
+        while isfile(output_file):
+            output_file = output_file[:-3] + '_%s.pi' % k
+            k += 1
+
+    _, qut_files = find_files_subject(subject, logs_path, outs_path, quts_path)
+    q_seen = {}
+    for file in qut_files:
+        with open(quts_path + file, 'rb') as mafi:
+            q_seen.update(pickle.load(mafi))
+    with open(output_file, 'wb') as mafi:
+        pickle.dump(q_seen, mafi)
+
+        
 def main(data_type, shape_pars, subject = 0, data_flat = None,
          threshold = None, games = 20, trials = None, sim_mu = None, sim_sd = None,
          as_seen = None, return_results = True, normalize = False,
