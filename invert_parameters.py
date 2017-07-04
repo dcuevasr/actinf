@@ -450,7 +450,7 @@ def simulate_data_4_conds(shape_pars, return_mabe = False):
     import numpy as np
 
 
-    targes<t_levels = np.array([595, 930, 1035, 1105])
+    target_levels = np.array([595, 930, 1035, 1105])
     target_lvls = np.round(target_levels/10).astype(int)
 
     tmp_data = {}
