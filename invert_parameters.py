@@ -724,6 +724,24 @@ def _create_data_flat(mabe, deci, trial, state, thres, nD, nT):
     data_flat['trial'] = trial
     return [data_flat]
 
+def calculate_posta_from_Q(gamma, old_gamma = 64, data = None,
+                           Qs = './data/qs.pi'):
+    """ Calculates the posteriors over actions given the Qs of a previous run,
+    the old value of gamma and a new value of gamma.
+
+    The default value of old_gamma comes from the default value of betClass.
+    """
+    import pickle
+    from itertools import product as itprod
+    V = np.array(list(itprod([0,1],repeat = 8)))
+
+    if isinstance(Qs, str):
+        with open(Qs, 'rb') as mafi:
+            Qs = pickle.load(mafi)
+    posta = {}
+    for key in Qs.keys():
+        cQs = Qs[key][-1]
+        expQ = np.exp(cGamma*cQs)
 
 
 def main(data_type, shape_pars, subject = 0, data_flat = None,
