@@ -76,11 +76,11 @@ class Actinf(object):
         # If the matrices A, B, C or D have any zero components, add noise and
         # normalize again.
         if SmallestProbability is True:
-            p0 = np.exp(-16.0) # Smallest probability
+            p0 = np.exp(-160.0) # Smallest probability
         else:
             p0 = 0
         #self.A += (np.min(self.A)==0)*p0
-        #self.A = sp.dot(self.A,np.diag(1/np.sum(self.A,0)))
+        self.A = sp.dot(self.A,np.diag(1/np.sum(self.A,0)))
 
         self.B += (np.min(self.B)==0)*p0
         for b in range(np.shape(self.B)[0]):
@@ -291,7 +291,7 @@ class Actinf(object):
         self.oV = []
         self.oH = []
 
-        sta[0] = np.nonzero(self.S)[0][0]
+        sta[0] = np.where(self.S>0.1)[0][0]
         # Some dummy initial values:
         PosteriorLastState = self.D
         PastAction = 1
@@ -424,8 +424,8 @@ class Actinf(object):
         self.oQ = []
         self.oV = []
         self.oH = []
-        if sta is None:
-            sta[0] = np.nonzero(self.S)[0][0]
+        if sta_f is None:
+            sta[0] = np.where(self.S>0.1)[0][0]
         # Some dummy initial values:
         PosteriorLastState = self.D
         PastAction = 1
@@ -448,7 +448,14 @@ class Actinf(object):
             else:
                 W[t] = Gamma
             # Sample an action and the next state using posteriors
-            act_tmp, sta_tmp = self.sampleNextState( sta[t], P[t,:])
+            if act_f is None:
+                cpost_act = P[t,:]
+            else:
+                cpost_act = np.zeros(self.nU)
+                cpost_act[act_f[t]] = 1
+
+            act_tmp, sta_tmp = self.sampleNextState( sta[t], cpost_act)
+
             if act_f is None:
                 act[t] = act_tmp
             if sta_f is None:
@@ -556,7 +563,7 @@ class Actinf(object):
             thres = self.thres
         else:
             thres = S.max()
-
+        #TODO: remove this dependence on the task
         maxy_plot = max(S.max(), self.thres)*1.2
         if ax is None:
             if fignum is None:
