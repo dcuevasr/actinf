@@ -516,14 +516,7 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma, aux_big_index,
 #    in_file  = './data/posteriors.pi'
     out_file = './data/out_%d.pi' % os.getpid()
     q_out_file = './data/qut_%d.pi' % os.getpid()
-    k = 0
-    while os.path.isfile(out_file): #find file that doesn't exist. Stupid HPC
-        out_file = './data/out_%d_%d.pi' % (os.getpid(), k)
-        k += 1
-    k = 0
-    while os.path.isfile(q_out_file): #find file that doesn't exist. Stupid HPC
-        q_out_file = './data/qut_%d_%d.pi' % (os.getpid(), k)
-        k += 1
+
     data = {}
     q_out = {}
     big_index = it.product(*aux_big_index)
@@ -540,13 +533,22 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma, aux_big_index,
             raise
         if Qs is not None:
             q_out[data_index] = Qs[index]
+    k = 0
+    while os.path.isfile(out_file): #find file that doesn't exist. Stupid HPC
+        out_file = './data/out_%d_%d.pi' % (os.getpid(), k)
+        k += 1
     with open(out_file, 'wb') as mafi:
         pickle.dump(data, mafi)
+
     if Qs is not None:
+        k = 0
+        while os.path.isfile(q_out_file): #find file that doesn't exist. Stupid HPC
+            q_out_file = './data/qut_%d_%d.pi' % (os.getpid(), k)
+            k += 1
         with open(q_out_file, 'wb') as mafi:
             pickle.dump(q_out, mafi)
 
-    print('Posteriors saved.')
+    print('Posteriors saved to %s' % out_file)
 
 
 def concatenate_data(data_folder=None, out_file=None, old_files=None):
@@ -766,12 +768,17 @@ def find_files_subject(subject, logs_path, outs_path, quts_path):
     import os
     import re
 
-    list_outs = str(os.listdir(outs_path))
+    dir_outs = (os.listdir(outs_path))
+    list_outs = str(dir_outs)
     list_quts = str(os.listdir(quts_path))
+
+    set_outs = set(dir_outs)
     
     out_files = []
     qut_files = []
     for file in os.listdir(logs_path):
+        if file[-3:] != 'out':
+            continue
         with open(logs_path + file, 'r') as mafi:
             text = mafi.read()
             re1 = re.compile(r'Subjects[ a-z]*: \[[0-9]\]')
@@ -780,11 +787,21 @@ def find_files_subject(subject, logs_path, outs_path, quts_path):
             if int(csub) == subject:
                 re3 = re.compile(r'pid: [0-9][0-9]*')
                 re4 = re.compile(r'[0-9][0-9]*')
-                cpid = re4.findall(re3.findall(text)[0])[0]
-                re5o = re.compile(r'out_%s[_0-9]*.pi' % cpid)
-                re5q = re.compile(r'qut_%s[_0-9]*.pi' % cpid)
-                out_found = re5o.findall(list_outs)
-                qut_found = re5q.findall(list_quts)
+                cpidline = re3.findall(text)
+                if len(cpidline) > 0:
+                    cpid = re4.findall(cpidline[0])[0]
+                    temp_out = 'out_%s.pi' % cpid
+                    if temp_out in set_outs:
+                        out_found = [temp_out]
+                        qut_found = ['qut_%s.pi' % cpid]
+                        _ = set_outs.remove(temp_out)
+                    else:
+                        re5o = re.compile(r'out_%s_[0-9]*.pi' % cpid)
+                        re5q = re.compile(r'qut_%s_[0-9]*.pi' % cpid)
+                        out_found = re5o.findall(list_outs)
+                        qut_found = re5q.findall(list_quts)
+                else:
+                    print('File %s is not a log file' % file, end='\n')
                 for fo in out_found:
                     out_files.append(fo)
                 for fq in qut_found:
