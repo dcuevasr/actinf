@@ -478,14 +478,17 @@ def _shift_states(states, thres, reihe, multiplier = 1.2):
         states[s] = (sta + np.round(multiplier*thres[s])*(reihe[s]-1)).astype(int)
 #        states[s] = (sta + np.round(multiplier*thres[s])*(reihe[s]-1)).astype(int)
 
-def _calculate_likelihood(deci, posta_inferred, aux_big_index):
+def _calculate_likelihood(deci, posta_inferred, aux_big_index=None):
     "Generalization of the one above"""
     import itertools as it
 
     def likelihood(data, dist):
         return np.log(dist[:,0]**((data==0)*1)*dist[:,1]**((data==1)*1))
     likelihood_model = np.zeros([len(x) for x in aux_big_index[:-1]])
-    big_index = it.product(*aux_big_index[:-1]) # no need to loop over s
+    if aux_big_index is not None:
+        big_index = it.product(*aux_big_index[:-1]) # no need to loop over s
+    else:
+        big_index = posta_inferred.keys()
     for index in big_index:
             likelihood_model[index] = np.sum(likelihood(deci, posta_inferred[index][:]))
     return likelihood_model
@@ -751,6 +754,8 @@ def calculate_posta_from_Q(alpha, old_alpha = 64, data = None,
         with open(Qs, 'rb') as mafi:
             Qs = pickle.load(mafi)
 
+        
+
     ratio = alpha/old_alpha
     posta = {}
     for key in Qs.keys():
@@ -831,7 +836,7 @@ def find_files_subject(subject, logs_path, outs_path, quts_path):
 
     return out_files, qut_files
 
-def invert_alpha(subject, shape_pars, data = None, alpha_vec = None,
+def invert_alpha(subject, shape_pars, data_flat = None, alpha_vec = None,
                  q_seen = None):
     """ Does a grid search over values of the hyperparameter alpha of 
     active inference.
@@ -840,14 +845,30 @@ def invert_alpha(subject, shape_pars, data = None, alpha_vec = None,
     import numpy as np
     import import_data as imda
 
-    if data is None:
+    if data_flat is None:
         _, data_flat = imda.main()
         data_flat = data_flat[subject],
+        
+    deci, trial, state, thres, reihe = (data_flat['choice'], data_flat['trial'],
+                                        data_flat['obs'], data_flat['threshold'],
+                                        data_flat['reihe'])
+    state = np.round(state/10).astype(int)
+    thres = np.round(thres/10).astype(int)
+    deci, trial, state, thres, reihe = _remove_above_thres(deci, trial,
+                                                           state, thres, reihe)
+    target_levels = np.round(data['TargetLevels']/10)
+
+    _shift_states(state, thres, reihe)
+    
     if q_seen is None:
         with open('./data/qus_subj_%s.pi' % subject, 'rb') as mafi:
             q_seen = pickle.load(mafi)
-    
-    
+    logli = {}
+    for alpha in alpha_vec:
+        posta = calculate_posta_from_Q(alpha, Qs = q_seen, guardar = False,
+                                       regresar = True)
+        logli[alpha] = _calculate_likelihood(deci, posta_inferred)
+    return logli
 
 def create_Q_file_subject(subject, logs_path = None, outs_path = None,
                           quts_path = None, output_file = None):
