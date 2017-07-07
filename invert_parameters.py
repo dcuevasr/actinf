@@ -733,6 +733,15 @@ def calculate_posta_from_Q(alpha, old_alpha = 64, data = None,
     the old value of gamma and a new value of gamma.
 
     The default value of old_gamma comes from the default value of betClass.
+
+    Parameters
+    ---------
+    guardar: bool
+        Whether or not to save the results to file. Note that this option
+        and --regresar-- are not mutually exclusive.
+    regresar: bool
+        Whether or not to return the results to the caller. Note that this option
+        and --guardar-- are not mutually exclusive.
     """
     import pickle
     from itertools import product as itprod
@@ -764,6 +773,11 @@ def calculate_posta_from_Q(alpha, old_alpha = 64, data = None,
 def find_files_subject(subject, logs_path, outs_path, quts_path):
     """ Using the logs, finds the out and qut files that contain infor for a 
     given subject.
+
+    For now, there are two ways of getting the file names out of the logs: 
+    (1) from the "pid: ####" line or (2)from the "Saving posteriors" line. The 
+    first option is for older implementations of invp.invert_parameters(). No
+    user interaction is needed to select from which line it's taken.
     """
     import os
     import re
@@ -785,29 +799,55 @@ def find_files_subject(subject, logs_path, outs_path, quts_path):
             re2 = re.compile(r'[0-9][0-9]*')
             csub = re2.findall(re1.findall(text)[0])[0]
             if int(csub) == subject:
-                re3 = re.compile(r'pid: [0-9][0-9]*')
-                re4 = re.compile(r'[0-9][0-9]*')
-                cpidline = re3.findall(text)
-                if len(cpidline) > 0:
-                    cpid = re4.findall(cpidline[0])[0]
-                    temp_out = 'out_%s.pi' % cpid
-                    if temp_out in set_outs:
-                        out_found = [temp_out]
-                        qut_found = ['qut_%s.pi' % cpid]
-                        _ = set_outs.remove(temp_out)
-                    else:
-                        re5o = re.compile(r'out_%s_[0-9]*.pi' % cpid)
-                        re5q = re.compile(r'qut_%s_[0-9]*.pi' % cpid)
-                        out_found = re5o.findall(list_outs)
-                        qut_found = re5q.findall(list_quts)
+                re_sp = re.compile(r'Saving posteriors.*')
+                re_fn = re.compile(r'out.*\.pi')
+                tmp_file_line = re_sp.findall(text)
+                if len(tmp_file_line)>0:
+                    out_found = [re_fn.findall(tmp_file_line[0])[0]]
+                    qut_found = [re.compile('out_').sub('qut_', out_found[0])]
+#                    print(qut_found)
                 else:
-                    print('File %s is not a log file' % file, end='\n')
+                    re3 = re.compile(r'pid: [0-9][0-9]*')
+                    re4 = re.compile(r'[0-9][0-9]*')
+                    cpidline = re3.findall(text)
+                    if len(cpidline) > 0:
+                        cpid = re4.findall(cpidline[0])[0]
+                        temp_out = 'out_%s.pi' % cpid
+                        if temp_out in set_outs:
+                            out_found = [temp_out]
+                            qut_found = ['qut_%s.pi' % cpid]
+                            _ = set_outs.remove(temp_out)
+                        else:
+                            re5o = re.compile(r'out_%s_[0-9]*.pi' % cpid)
+                            re5q = re.compile(r'qut_%s_[0-9]*.pi' % cpid)
+                            out_found = re5o.findall(list_outs)
+                            qut_found = re5q.findall(list_quts)
+                    else:
+                        print('File %s is not a log file' % file, end='\n')
                 for fo in out_found:
                     out_files.append(fo)
                 for fq in qut_found:
                     qut_files.append(fq)
 
     return out_files, qut_files
+
+def invert_alpha(subject, shape_pars, data = None, alpha_vec = None,
+                 q_seen = None):
+    """ Does a grid search over values of the hyperparameter alpha of 
+    active inference.
+    """
+    import pickle
+    import numpy as np
+    import import_data as imda
+
+    if data is None:
+        _, data_flat = imda.main()
+        data_flat = data_flat[subject],
+    if q_seen is None:
+        with open('./data/qus_subj_%s.pi' % subject, 'rb') as mafi:
+            q_seen = pickle.load(mafi)
+    
+    
 
 def create_Q_file_subject(subject, logs_path = None, outs_path = None,
                           quts_path = None, output_file = None):
