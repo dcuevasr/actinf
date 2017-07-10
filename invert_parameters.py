@@ -837,7 +837,7 @@ def find_files_subject(subject, logs_path, outs_path, quts_path):
     return out_files, qut_files
 
 def invert_alpha(subject, shape_pars, data_flat = None, alpha_vec = None,
-                 q_seen = None):
+                 q_seen = None, regresar = True, guardar = False):
     """ Does a grid search over values of the hyperparameter alpha of 
     active inference.
     """
@@ -847,18 +847,7 @@ def invert_alpha(subject, shape_pars, data_flat = None, alpha_vec = None,
 
     if data_flat is None:
         _, data_flat = imda.main()
-        data_flat = data_flat[subject],
-        
-    deci, trial, state, thres, reihe = (data_flat['choice'], data_flat['trial'],
-                                        data_flat['obs'], data_flat['threshold'],
-                                        data_flat['reihe'])
-    state = np.round(state/10).astype(int)
-    thres = np.round(thres/10).astype(int)
-    deci, trial, state, thres, reihe = _remove_above_thres(deci, trial,
-                                                           state, thres, reihe)
-    target_levels = np.round(data['TargetLevels']/10)
-
-    _shift_states(state, thres, reihe)
+        data_flat = data_flat[subject]
     
     if q_seen is None:
         with open('./data/qus_subj_%s.pi' % subject, 'rb') as mafi:
@@ -867,8 +856,13 @@ def invert_alpha(subject, shape_pars, data_flat = None, alpha_vec = None,
     for alpha in alpha_vec:
         posta = calculate_posta_from_Q(alpha, Qs = q_seen, guardar = False,
                                        regresar = True)
-        logli[alpha] = _calculate_likelihood(deci, posta_inferred)
-    return logli
+        logli[alpha] = infer_parameters(data = data_flat, as_seen = posta,
+                                        shape_pars = ['unimodal_s', np.arange(-15,45), np.arange(1,15)])
+    if guardar is True:
+        with open('./data/alpha_logli_subj_%s_%s.pi' % (subject, shape_pars[0]), 'wb') as mafi:
+            pickle.dump(logli, mafi)
+    if regresar is True:
+        return logli
 
 def create_Q_file_subject(subject, logs_path = None, outs_path = None,
                           quts_path = None, output_file = None):
