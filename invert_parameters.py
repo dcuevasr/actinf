@@ -856,8 +856,9 @@ def invert_alpha(subject, shape_pars, data_flat = None, alpha_vec = None,
     for alpha in alpha_vec:
         posta = calculate_posta_from_Q(alpha, Qs = q_seen, guardar = False,
                                        regresar = True)
-        logli[alpha] = infer_parameters(data = data_flat, as_seen = posta,
+        tmp_out = infer_parameters(data = data_flat, as_seen = posta,
                                         shape_pars = ['unimodal_s', np.arange(-15,45), np.arange(1,15)])
+        logli[alpha] = tmp_out[0]
     if guardar is True:
         with open('./data/alpha_logli_subj_%s_%s.pi' % (subject, shape_pars[0]), 'wb') as mafi:
             pickle.dump(logli, mafi)

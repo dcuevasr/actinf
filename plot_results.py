@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
+Bunch of mostly-disconnected functions to plot and visualize results.
+
 Created on Tue Mar 21 09:09:19 2017
 
 @author: dario
@@ -1577,3 +1579,55 @@ def likelihood_data(shape_pars, thres_ix = 0, subject = 0):
 
     return logli, posta, context
 
+def plot_likelihood_alpha(subjects, filenames_base = None):
+    """ Plots, for each subject in --subjects--, a histogram of the likelihoods
+    of the data for each value of alpha in the supplied files.
+    """
+
+    import pickle
+    import numpy as np
+    import utils
+    
+    
+    if isinstance(subjects, int):
+        subjects = subjects,
+    if filenames_base is None:
+        filenames_base = '/home/dario/Work/Proj_ActiveInference/results/alpha_logli_subj_%s_unimodal_s.pi'
+
+    s1, s2 = utils.calc_subplots(len(subjects))
+    for ns,s in enumerate(subjects):
+        with open(filenames_base % s, 'rb') as mafi:
+            logli = pickle.load(mafi)
+            
+        plt.subplot(s1,s2,ns+1)
+        xdata = []
+        ydata = []
+        for key in logli.keys():
+            xdata.append(key)
+            ydata.append(logli[key][0].max())
+
+        plt.bar(np.log(xdata), ydata)
+    plt.show()
+
+def plot_evolution_likelihood_map(subject, filenames_base = None):
+    """ Plots the likelihood map on the mu-sd plane as alpha changes."""
+    import pickle
+    
+    if filenames_base is None:
+        filenames_base = '/home/dario/Work/Proj_ActiveInference/results/alpha_logli_subj_%s_unimodal_s.pi'
+
+    with open(filenames_base % subject, 'rb') as mafi:
+        logli = pickle.load(mafi)
+
+    s1,s2 = calc_subplots(len(logli))
+    plt.set_cmap('gray_r')
+    keyset = np.sort([key for key in logli.keys()])
+    for n,key in enumerate(keyset):
+        ax = plt.subplot(s1,s2,n+1)
+        likelihood = np.exp(logli[key][0]-logli[key][0].max())
+        ax.imshow(likelihood, aspect=0.25)
+        if not ax.is_last_row():
+            ax.set_xticks([])
+        ax.set_title('%s, %s' % (key,logli[key][0].max()))
+
+    plt.show(block=False)
