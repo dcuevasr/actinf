@@ -31,16 +31,18 @@ Uses:
                         {0.9,0.3,1,3} will be used.
 
 """
-from __future__ import print_function # Probably unnecessary.
+from __future__ import print_function  # Probably unnecessary.
 
 import numpy as np
 import itertools
 import utils
 import actinfClass as afc
+
+
 class betMDP(afc.Actinf):
-    def __init__(self, paradigm = 'kolling compact', changePairs = True,
-                 actionPairs = None, nS = None, nT = None, thres = None,
-                 obs_sd = None):
+    def __init__(self, paradigm='kolling compact', changePairs=True,
+                 actionPairs=None, nS=None, nT=None, thres=None,
+                 obs_sd=None):
         """
         Initializes the instance with parameter values depending on the inputs.
         See the class's help for details on optional inputs.
@@ -55,14 +57,13 @@ class betMDP(afc.Actinf):
         if thres is not None:
             thres = int(thres)
 
-
         if paradigm == 'kolling':
             self.paradigm = 'kolling'
             self.pdivide = 1
             if nS is not None:
                 self.nS = nS
             else:
-                self.nS = 2000 #max number of attainable points
+                self.nS = 2000  # max number of attainable points
             if thres is not None:
                 self.thres = thres
             else:
@@ -73,7 +74,7 @@ class betMDP(afc.Actinf):
             if nS is not None:
                 self.nS = nS
             else:
-                self.nS = 200 #max number of attainable points
+                self.nS = 200  # max number of attainable points
             if thres is not None:
                 self.thres = thres
             else:
@@ -82,13 +83,12 @@ class betMDP(afc.Actinf):
             if nS is not None:
                 self.nS = nS
             else:
-                self.nS = 20 #max number of attainable points
+                self.nS = 20  # max number of attainable points
             if thres is not None:
                 self.thres = thres
             else:
                 self.thres = 5
             self.paradigm = 'small'
-
 
         if nT is not None:
             self.nT = nT
@@ -97,15 +97,14 @@ class betMDP(afc.Actinf):
 
         self.nU = 2
 
-        self.obsnoise = 0#0.001 #0.0001
+        self.obsnoise = 0  # 0.001 #0.0001
 
         if changePairs is True:
-            self.setMDPMultVar(obs_sd = obs_sd)
+            self.setMDPMultVar(obs_sd=obs_sd)
         else:
-            self.setMDP(parameters = actionPairs, obs_sd = obs_sd)
+            self.setMDP(parameters=actionPairs, obs_sd=obs_sd)
 
-
-    def setMDP(self,parameters = None, obs_sd = None):
+    def setMDP(self, parameters=None, obs_sd=None):
         """ Sets the observation and transition matrices, as well as the goals,
         the priors over initial states, the real initial state and the possible
         policies to evaluate.
@@ -121,9 +120,9 @@ class betMDP(afc.Actinf):
         from scipy.stats import norm
         # checking inputs and assigning defaults if necessary
         if parameters != None:
-            if not isinstance(parameters,dict):
+            if not isinstance(parameters, dict):
                 raise Exception('BadInput: ''parameters'' is not a dict')
-            expectedParameters = ['risklow','riskhigh','rewlow','rewhigh']
+            expectedParameters = ['risklow', 'riskhigh', 'rewlow', 'rewhigh']
             compareSets = set(parameters) & set(expectedParameters)
             if compareSets != set(expectedParameters):
                 raise Exception('BadInput: ''Paremeters'' does not contain the \
@@ -143,29 +142,29 @@ class betMDP(afc.Actinf):
         nP = self.nP
         # Define the observation matrix
         if obs_sd is not None:
-            A = np.zeros((nS*nP, nS*nP))
-            for n in range(nS*nP):
-                A[:,n] = norm.pdf(np.arange(nS*nP), n, obs_sd)
+            A = np.zeros((nS * nP, nS * nP))
+            for n in range(nS * nP):
+                A[:, n] = norm.pdf(np.arange(nS * nP), n, obs_sd)
         else:
             A = np.eye(self.nS) + self.obsnoise
-            A = A/sum(A, axis=0)
+            A = A / sum(A, axis=0)
 
         # Define transition matrices
-        B = np.zeros((self.nU,self.nS,self.nS))
-        B[0] = np.diag(risklow*np.ones(self.nS-rewlow),-rewlow)
-        np.fill_diagonal(B[0], 1-risklow)
-        B[0][-1,(-1-rewlow):-1] = risklow
-        B[0][-1,-1] = 1
+        B = np.zeros((self.nU, self.nS, self.nS))
+        B[0] = np.diag(risklow * np.ones(self.nS - rewlow), -rewlow)
+        np.fill_diagonal(B[0], 1 - risklow)
+        B[0][-1, (-1 - rewlow):-1] = risklow
+        B[0][-1, -1] = 1
 
-        B[1] = np.diag(riskhigh*np.ones(self.nS-rewhigh),-rewhigh)
-        np.fill_diagonal(B[1], 1-riskhigh)
-        B[1][-1,(-1-rewhigh):-1] = riskhigh
-        B[1][-1,-1] = 1
+        B[1] = np.diag(riskhigh * np.ones(self.nS - rewhigh), -rewhigh)
+        np.fill_diagonal(B[1], 1 - riskhigh)
+        B[1][-1, (-1 - rewhigh):-1] = riskhigh
+        B[1][-1, -1] = 1
 
         # Define priors over last state (goal)
         C = np.zeros(self.nS)
         C[self.thres:] = 1
-        C = C/sum(C)
+        C = C / sum(C)
 
         # Priors over initial state
         D = np.zeros(self.nS)
@@ -175,7 +174,8 @@ class betMDP(afc.Actinf):
         S = D.astype(int)
 
         # Policies: all combinations of 2 actions
-        V = np.array(list(itertools.product(range(0,self.nU),repeat = self.nT)))
+        V = np.array(list(itertools.product(
+            range(0, self.nU), repeat=self.nT)))
 
         # Preparing inputs for MDP
         self.A = A
@@ -186,14 +186,14 @@ class betMDP(afc.Actinf):
         self.V = V.astype(int)
         self.alpha = 64
         self.beta = 4
-        self.lambd = 0.005 # or 1/4?
+        self.lambd = 0.005  # or 1/4?
         self.gamma = 20
 
         self.importMDP()
 
 #        self.H = np.zeros(self.H.shape)
 
-    def setMDPMultVar(self,parameters=None, obs_sd = None):
+    def setMDPMultVar(self, parameters=None, obs_sd=None):
         """Sets the observation and transition matrices, as well as the goals,
         the priors over initial states, the real initial state and the possible
         policies to evaluate.
@@ -216,9 +216,9 @@ class betMDP(afc.Actinf):
 #        thres = self.thres
         obsnoise = self.obsnoise
         if parameters != None:
-            if not isinstance(parameters,dict):
+            if not isinstance(parameters, dict):
                 raise ValueError('Input ''parameters'' is not a dict')
-            expectedParameters = ['pL','pH','rL','rH']
+            expectedParameters = ['pL', 'pH', 'rL', 'rH']
             compareSets = set(parameters) & set(expectedParameters)
             if compareSets != set(expectedParameters):
                 raise ValueError(' ''paremeters'' does not contain the \
@@ -236,11 +236,11 @@ class betMDP(afc.Actinf):
 
         # Define observation matrix
         if obs_sd is not None:
-            A = np.zeros((nS*nP, nS*nP))
-            for n in range(nS*nP):
-                A[:,n] = norm.pdf(np.arange(nS*nP), n, obs_sd)
+            A = np.zeros((nS * nP, nS * nP))
+            for n in range(nS * nP):
+                A[:, n] = norm.pdf(np.arange(nS * nP), n, obs_sd)
         else:
-            A = np.eye(nS*nP) + obsnoise/nP
+            A = np.eye(nS * nP) + obsnoise / nP
         # Transition matrices
         # num2coords = np.unravel_index
         # coords2num = np.ravel_multi_index
@@ -249,16 +249,15 @@ class betMDP(afc.Actinf):
         # Define priors over last state (goal)
         self.set_prior_goals()
         # Priors over initial state
-        D = np.zeros(nS*nP)
+        D = np.zeros(nS * nP)
         D[0] = 1
 
         # Real initial state
         S = D.astype(int)
 
         # Policies: all combinations of 2 actions
-        V = np.array(list(itertools.product(range(0,nU),repeat = nT)))
+        V = np.array(list(itertools.product(range(0, nU), repeat=nT)))
         np.random.shuffle(V)
-
 
         # Preparing inputs for MDP
         self.A = A
@@ -269,15 +268,14 @@ class betMDP(afc.Actinf):
         self.V = V.astype(int)
         self.alpha = 64
         self.beta = 4
-        self.lambd = 0.005 # or 1/4?
+        self.lambd = 0.005  # or 1/4?
         self.gamma = 20
 
         self.importMDP()
 
 #        self.H = np.zeros(self.H.shape)
 
-
-    def priors_over_goals(self, threshold = None, just_return = False):
+    def priors_over_goals(self, threshold=None, just_return=False):
         """
         xxx DEPRECATED in favor of set_prior_goals() xxx
 
@@ -293,12 +291,12 @@ class betMDP(afc.Actinf):
         else:
             thres = threshold
 
-        C = np.zeros(self.nS*self.nP)
-        allothers = np.array(utils.allothers([range(thres,self.nS),
+        C = np.zeros(self.nS * self.nP)
+        allothers = np.array(utils.allothers([range(thres, self.nS),
                                               range(self.nP)],
-                                              (self.nS,self.nP)))
+                                             (self.nS, self.nP)))
         C[allothers] = 1
-        C = C/sum(C)
+        C = C / sum(C)
 
         if just_return is False:
             self.C = C
@@ -314,19 +312,19 @@ class betMDP(afc.Actinf):
         make it internal.
         """
         if self.paradigm == 'small':
-            nP = 3;
+            nP = 3
             pL = np.array([0.9, 0.6, 0.8])
             pH = np.array([0.3, 0.3, 0.2])
             rL = np.array([1, 2, 1])
             rH = np.array([3, 4, 4])
         elif self.paradigm == 'kolling':
             nP = 8
-            pL = np.array([90, 60, 75, 55, 90, 60, 75, 80], dtype=float)/100
-            pH = np.array([35, 35, 35, 20, 45, 45 ,40, 30], dtype=float)/100
+            pL = np.array([90, 60, 75, 55, 90, 60, 75, 80], dtype=float) / 100
+            pH = np.array([35, 35, 35, 20, 45, 45, 40, 30], dtype=float) / 100
             rL = np.array([100, 180, 145, 145, 115, 150, 170, 120],
-                          dtype = int)/self.pdivide
-            rH = np.array([265 ,260 ,245 ,350, 240, 190, 245, 210],
-                          dtype = int)/self.pdivide
+                          dtype=int) / self.pdivide
+            rH = np.array([265, 260, 245, 350, 240, 190, 245, 210],
+                          dtype=int) / self.pdivide
 
         self.nP = nP
         self.pL = pL
@@ -334,9 +332,9 @@ class betMDP(afc.Actinf):
         self.rL = rL
         self.rH = rH
 
-    def set_transition_matrices(self, priorActPairs = None,
-                                reward = None, probability = None,
-                                just_return = False):
+    def set_transition_matrices(self, priorActPairs=None,
+                                reward=None, probability=None,
+                                just_return=False):
         """ Defines the transition matrices (actions) for the task, using
         the input priorActPairs as priors over the probability of transitioning
         to a new action pair.
@@ -355,23 +353,25 @@ class betMDP(afc.Actinf):
             rL = rH = [reward]
 
         if priorActPairs is None:
-            pAP = np.ones(nP)/nP
+            pAP = np.ones(nP) / nP
         else:
             pAP = priorActPairs
 
-        B = np.zeros((nU,nS*nP,nS*nP))
+        B = np.zeros((nU, nS * nP, nS * nP))
         for s in range(nS):
             for p in range(nP):
-                nextsL = np.min((s+rL[p],nS-1)).astype(int)
-                nextsH = np.min((s+rH[p],nS-1)).astype(int)
-                mixL = utils.allothers([[nextsL],range(nP)],(nS,nP))
-                mixH = utils.allothers([[nextsH],range(nP)],(nS,nP))
-                this = utils.allothers([[s]     ,range(nP)],(nS,nP))
-                ifrom = [np.ravel_multi_index([s,p],(nS,nP),order='F')]
-                B[np.ix_([0], mixL, ifrom)] = (pL[p]*pAP).reshape(1,nP,1)
-                B[np.ix_([0], this, ifrom)] = ((1 - pL[p])*pAP).reshape(1,nP,1)
-                B[np.ix_([1], mixH, ifrom)] = (pH[p]*pAP).reshape(1,nP,1)
-                B[np.ix_([1], this, ifrom)] = ((1 - pH[p])*pAP).reshape(1,nP,1)
+                nextsL = np.min((s + rL[p], nS - 1)).astype(int)
+                nextsH = np.min((s + rH[p], nS - 1)).astype(int)
+                mixL = utils.allothers([[nextsL], range(nP)], (nS, nP))
+                mixH = utils.allothers([[nextsH], range(nP)], (nS, nP))
+                this = utils.allothers([[s], range(nP)], (nS, nP))
+                ifrom = [np.ravel_multi_index([s, p], (nS, nP), order='F')]
+                B[np.ix_([0], mixL, ifrom)] = (pL[p] * pAP).reshape(1, nP, 1)
+                B[np.ix_([0], this, ifrom)] = (
+                    (1 - pL[p]) * pAP).reshape(1, nP, 1)
+                B[np.ix_([1], mixH, ifrom)] = (pH[p] * pAP).reshape(1, nP, 1)
+                B[np.ix_([1], this, ifrom)] = (
+                    (1 - pH[p]) * pAP).reshape(1, nP, 1)
         if just_return is False:
             self.B = B
         else:
@@ -392,17 +392,15 @@ class betMDP(afc.Actinf):
 
         B = np.zeros((nB, nS, nS))
         for b in range(nB):
-            twoBs = self.set_transition_matrices(reward = reward[b],
-                                            probability = probability[b],
-                                            just_return = True)
+            twoBs = self.set_transition_matrices(reward=reward[b],
+                                                 probability=probability[b],
+                                                 just_return=True)
             B[b] = twoBs[0]
-
 
         return B
 
-
-    def set_prior_goals(self, selectShape='flat', shape_pars = None,
-                  convolute = True, cutoff = True, just_return = False):
+    def set_prior_goals(self, select_shape='flat', shape_pars=None,
+                        convolute=True, cutoff=True, just_return=False):
         """ Wrapper for the functions prior_goals_flat/Ramp/Unimodal.
 
         Sets priors over last state (goals) in different shapes for testing
@@ -413,11 +411,11 @@ class betMDP(afc.Actinf):
         which uses a Gaussian to set up a 'hump' after threshold.
 
         Uses:
-            goals = setPriorGoals(mdp [,selectShape] [, rampX1] [, Gmean]
+            goals = setPriorGoals(mdp [,select_shape] [, rampX1] [, Gmean]
                                   [, Gscale] [,convolute] [,just_return])
 
         Inputs:
-        selectShape         {'flat','ramp','unimodal','unimodal_s','sigmoid'}
+        select_shape         {'flat','ramp','unimodal','unimodal_s','sigmoid'}
                             selects which shape is to be used. When selecting
                             'ramp', the optional input rampX1 can be selected
                             (default 1). When using 'unimodal', Gmean and
@@ -449,79 +447,78 @@ class betMDP(afc.Actinf):
         (Note: when just_return is False, nothing is returned)
         goals               [nS] are the resulting priors over last state.
         """
-
         if shape_pars is not None:
             if isinstance(shape_pars[0], str):
-                selectShape = shape_pars[0]
+                select_shape = shape_pars[0]
                 shape_pars = shape_pars[1:]
 
 #            for item in shape_pars:
 #                if isinstance(item, list):
 #                    item = item[0]
 
-        if selectShape == 'flat':
-            goals = self.prior_goals_flat(convolute, just_return = True)
-        elif selectShape == 'ramp':
+        if select_shape == 'flat':
+            goals = self.prior_goals_flat(convolute, just_return=True)
+        elif select_shape == 'ramp':
             rampX1 = shape_pars[0]
 #                raise ValueError('A value for rampX1 must be provided when using'+
 #                                ' ''ramp''')
-            goals = self.prior_goals_ramp(rampX1 = rampX1,
-                                   convolute = convolute, just_return = True)
-        elif selectShape == 'unimodal':
+            goals = self.prior_goals_ramp(rampX1=rampX1,
+                                          convolute=convolute, just_return=True)
+        elif select_shape == 'unimodal':
             Gmean, Gscale = shape_pars
 #                raise ValueError('Values for Gmean and Gscale must be provided '+
 #                                 'when using ''unimodal''')
             goals = self.prior_goals_unimodal(Gmean, Gscale,
-                                    convolute = convolute,
-                                    cutoff = cutoff, just_return = True)
+                                              convolute=convolute,
+                                              cutoff=cutoff, just_return=True)
 
-        elif selectShape == 'unimodal_s':
+        elif select_shape == 'unimodal_s':
             Gmean, Gscale = shape_pars
             Gmean += self.thres
             goals = self.prior_goals_unimodal(Gmean, Gscale,
-                                    convolute = convolute,
-                                    cutoff = cutoff, just_return = True)
-        elif selectShape == 'sigmoid':
+                                              convolute=convolute,
+                                              cutoff=cutoff, just_return=True)
+        elif select_shape == 'sigmoid':
             Scenter, Sslope = shape_pars
 #                raise ValueError('Values for Scenter and Sslope must be '+
 #                                 'provided when using ''sigmoid''')
             goals = self.prior_goals_sigmoid(Scenter, Sslope,
-                                     convolute = convolute, just_return = True,
-                                     cutoff = cutoff)
-        elif selectShape == 'sigmoid_s':
+                                             convolute=convolute, just_return=True,
+                                             cutoff=cutoff)
+        elif select_shape == 'sigmoid_s':
             Scenter, Sslope = shape_pars
             Scenter += self.thres
 #                raise ValueError('Values for Scenter and Sslope must be '+
 #                                 'provided when using ''sigmoid''')
             goals = self.prior_goals_sigmoid(Scenter, Sslope,
-                                     convolute = convolute, just_return = True,
-                                     cutoff = cutoff)
-        elif selectShape == 'exponential':
+                                             convolute=convolute, just_return=True,
+                                             cutoff=cutoff)
+        elif select_shape == 'exponential':
             exponent = shape_pars[0]
             goals = self.prior_goals_exponential(exponent,
-                                     convolute = convolute, just_return = True,
-                                     cutoff = cutoff)
+                                                 convolute=convolute, just_return=True,
+                                                 cutoff=cutoff)
         else:
-            raise ValueError('Unrecognized value for selectShape')
+            raise ValueError('Unrecognized value for select_shape')
         if just_return is True:
             return goals
         elif just_return is False and convolute is True:
             self.C = goals
-            self.C += (np.min(self.C)==0)*np.exp(-16)
-            self.C = self.C/self.C.sum(axis=0)
+            self.C += (np.min(self.C) == 0) * np.exp(-16)
+            self.C = self.C / self.C.sum(axis=0)
             self.lnC = np.log(self.C)
         else:
             raise ValueError('Bad combination of just_return and convolute')
 
-    def prior_goals_sigmoid(self, Scenter, Sslope, convolute = True,
-                            just_return = True, slope_div = 10, cutoff = True):
+    def prior_goals_sigmoid(self, Scenter, Sslope, convolute=True,
+                            just_return=True, slope_div=10, cutoff=True):
         """ To be called from set_prior_goals().
 
         NOTE: slope_div rescales the S parameter in the sigmoid (slope). This
         is done to avoid numerical problems when saving posteriors over
         actions in invert_parameters. It can be set to 1 to remove the effect.
         """
-        sigmoid = lambda C,S,X: 1/(1 + np.exp(-S/slope_div*(X - C)))
+        def sigmoid(C, S, X): return 1 / (1 + np.exp(-S / slope_div * (X - C)))
         points = np.arange(self.nS)
         goals = sigmoid(Scenter, Sslope, points)
         if convolute:
@@ -538,20 +535,20 @@ class betMDP(afc.Actinf):
             self.C = goals
             self.lnC = np.log(goals)
 
-    def prior_goals_flat(self, convolute = True, just_return = True):
+    def prior_goals_flat(self, convolute=True, just_return=True):
         """To be called from set_prior_goals()."""
         from utils import allothers
 
         if convolute is True:
-            goals = np.zeros(self.nS*self.nP, dtype = float)
+            goals = np.zeros(self.nS * self.nP, dtype=float)
 
-            indices = np.array(allothers([range(self.thres,self.nS),
-                                      range(self.nP)], (self.nS,self.nP)),
-                                     dtype = int)
-            goals[indices] = 1.0/indices.size
+            indices = np.array(allothers([range(self.thres, self.nS),
+                                          range(self.nP)], (self.nS, self.nP)),
+                               dtype=int)
+            goals[indices] = 1.0 / indices.size
         elif convolute is False:
-            goals = np.zeros(self.nS, dtype = float)
-            goals[self.thres:] = 1.0/goals[self.thres:].size
+            goals = np.zeros(self.nS, dtype=float)
+            goals[self.thres:] = 1.0 / goals[self.thres:].size
 
         if just_return is True:
             return goals
@@ -561,8 +558,7 @@ class betMDP(afc.Actinf):
         else:
             raise ValueError('Bad combination of just_return and convolute')
 
-
-    def prior_goals_ramp(self, rampX1, convolute = True, just_return = True):
+    def prior_goals_ramp(self, rampX1, convolute=True, just_return=True):
         """ Creates goals as an increasing or decreasing ramp, depending on the
         value given for rampX1.
 
@@ -575,26 +571,25 @@ class betMDP(afc.Actinf):
         """
         from utils import allothers
 
-
         thres = self.thres
         nS = self.nS
         pastThres = nS - thres
         nP = self.nP
 
         minX1 = 0
-        maxX1 = 2.0/pastThres
+        maxX1 = 2.0 / pastThres
 
-        if rampX1<minX1 or rampX1>maxX1:
-            raise ValueError ('Initial point X1 is outside of allowable '+
-                              'limits for this task. min = %f, max = %f'
-                              % (minX1, maxX1))
-        if rampX1 == 1.0/pastThres:
-            raise ValueError('rampX1 is invalid. For this value, use ''flat'''+
-                                ' instead')
+        if rampX1 < minX1 or rampX1 > maxX1:
+            raise ValueError('Initial point X1 is outside of allowable ' +
+                             'limits for this task. min = %f, max = %f'
+                             % (minX1, maxX1))
+        if rampX1 == 1.0 / pastThres:
+            raise ValueError('rampX1 is invalid. For this value, use ''flat''' +
+                             ' instead')
 
-        slope = (2.0/pastThres - 2.0*rampX1)/(pastThres-1)
+        slope = (2.0 / pastThres - 2.0 * rampX1) / (pastThres - 1)
 
-        stateRamp = rampX1 + slope*np.arange(pastThres)
+        stateRamp = rampX1 + slope * np.arange(pastThres)
 
         istateR = np.arange(self.thres, self.nS)
 
@@ -602,12 +597,12 @@ class betMDP(afc.Actinf):
             goals = np.zeros(nS)
             goals[thres:] = stateRamp
         else:
-            goals = np.zeros(nS*nP)
-            for ix,vx in enumerate(istateR):
-                indices = np.array(allothers([[vx],range(self.nP)],
-                                              (self.nS,self.nP)))
+            goals = np.zeros(nS * nP)
+            for ix, vx in enumerate(istateR):
+                indices = np.array(allothers([[vx], range(self.nP)],
+                                             (self.nS, self.nP)))
                 goals[indices] = stateRamp[ix]
-            goals = goals/goals.sum()
+            goals = goals / goals.sum()
         if just_return is True:
             return goals
         elif just_return is False and convolute is True:
@@ -616,14 +611,14 @@ class betMDP(afc.Actinf):
         else:
             raise ValueError('Bad combination of just_return and convolute')
 
-    def prior_goals_exponential(self, exponent, convolute = True, cutoff = True,
-                                just_return = True):
+    def prior_goals_exponential(self, exponent, convolute=True, cutoff=True,
+                                just_return=True):
         """ Creates priors that follow an exponential law with the given power.
 
         To be called from set_prior_goals().
         """
         points = np.arange(self.nS)
-        expoints = (0.1*points)**(exponent/10)
+        expoints = (0.1 * points)**(exponent / 10)
 
         if cutoff is True:
             expoints[:self.thres] = 0
@@ -639,10 +634,8 @@ class betMDP(afc.Actinf):
         else:
             raise ValueError('Bad combination of just_return and convolute')
 
-
-
     def prior_goals_unimodal(self, Gmean, Gscale,
-                           convolute = True, cutoff = True, just_return = True):
+                             convolute=True, cutoff=True, just_return=True):
         """ Sets the priors over last state (goals) to a Gaussian distribution,
         defined by Gmean and Gscale. To be called from set_prior_goals().
         """
@@ -656,14 +649,14 @@ class betMDP(afc.Actinf):
         if convolute is False:
             goals = npoints
         else:
-#            goals = np.zeros(self.Ns)
-#            istateR = np.arange(self.thres, self.nS, dtype=int)
-#            for ix,vx in enumerate(istateR):
-#                indices = np.array(allothers([[vx],range(self.nP)],
-#                                              (self.nS,self.nP)))
-#                goals[indices] = npoints[vx]
+            #            goals = np.zeros(self.Ns)
+            #            istateR = np.arange(self.thres, self.nS, dtype=int)
+            #            for ix,vx in enumerate(istateR):
+            #                indices = np.array(allothers([[vx],range(self.nP)],
+            #                                              (self.nS,self.nP)))
+            #                goals[indices] = npoints[vx]
             goals = np.tile(npoints, self.nP)
-            goals = goals/goals.sum()
+            goals = goals / goals.sum()
 
         if just_return is True:
             return goals
@@ -673,9 +666,7 @@ class betMDP(afc.Actinf):
         else:
             raise ValueError('Bad combination of just_return and convolute')
 
-
-
-    def print_table_results(self, results = None):
+    def print_table_results(self, results=None):
         """ Prints a table using the results from the Example from actinfClass.
 
         Data for other runs can be passed as optional arguments. For this, the
@@ -697,8 +688,8 @@ class betMDP(afc.Actinf):
         rH = self.rH
         rL = self.rL
 
-        expH = pH*rH
-        expL = pL*rL
+        expH = pH * rH
+        expL = pL * rL
 
         if results is not None:
             Results = results
@@ -706,7 +697,7 @@ class betMDP(afc.Actinf):
             Results = self.Example
 
         real_state, action_pair = np.unravel_index(Results['RealStates'],
-                                                   (self.nS,self.nP), order='F')
+                                                   (self.nS, self.nP), order='F')
 
         actions = Results['Actions']
         post_actions = Results['PostActions']
@@ -718,29 +709,27 @@ class betMDP(afc.Actinf):
                                expH[action_pair[t]],
                                post_actions[t][0], post_actions[t][1]])
 
-        table_headers = ['Trial','State','Act Pair', 'Action', 'expL', 'expH',
+        table_headers = ['Trial', 'State', 'Act Pair', 'Action', 'expL', 'expH',
                          'ProbAct0', 'ProbAct1']
-        print(tabulate(table_data, headers = table_headers))
+        print(tabulate(table_data, headers=table_headers))
 
-
-    def all_points_and_trials(self, preserve_all = False):
+    def all_points_and_trials(self, preserve_all=False):
         """ Wrapper to do all_points_and_trials_small/kolling, depending on the
         paradigm
         """
-        if self.paradigm=='small':
+        if self.paradigm == 'small':
             points, trials_needed = self.all_points_and_trials_small(
-                                                                preserve_all)
+                preserve_all)
             return points, trials_needed
-        elif self.paradigm=='kolling':
+        elif self.paradigm == 'kolling':
             points, trials_needed = self.all_points_and_trials_kolling(
-                                                                preserve_all)
+                preserve_all)
             return points, trials_needed
         else:
             raise ValueError('Unknown paradigm')
             return None, None
 
-
-    def all_points_and_trials_small(self, preserve_all = False):
+    def all_points_and_trials_small(self, preserve_all=False):
         """ Calculates all the possible points attainable during this task, and
         all the possible number of trials in which the agent could have gotten
         each of these points.
@@ -760,39 +749,38 @@ class betMDP(afc.Actinf):
 
         rL = self.rL
         rH = self.rH
-        actPairs = np.unique(np.concatenate(([0],rL, rH)))
+        actPairs = np.unique(np.concatenate(([0], rL, rH)))
         numberActPairs = actPairs.size
         # All possible combinations of all actions:
         Vb = np.array(list(itertools.product(range(numberActPairs),
-                                             repeat = self.nT)))
+                                             repeat=self.nT)))
 
         # Number of trials needed for a given number of points:
-        trialsNeeded = np.zeros(Vb.shape[0], dtype = int)
+        trialsNeeded = np.zeros(Vb.shape[0], dtype=int)
         # Calculate these points (save in V).
         for r, row in enumerate(Vb):
-            trialsNeeded[r] = self.nT - Vb[r,Vb[r,:]==0].size
-        points = np.sum(Vb, axis=1) #Points gained
+            trialsNeeded[r] = self.nT - Vb[r, Vb[r, :] == 0].size
+        points = np.sum(Vb, axis=1)  # Points gained
 
         if preserve_all is False:
-            under_thres = points<self.thres
+            under_thres = points < self.thres
             points = points[under_thres]
             trialsNeeded = trialsNeeded[under_thres]
         else:
-            #Eliminate those past nS
-            under_nS = points<self.nS
+            # Eliminate those past nS
+            under_nS = points < self.nS
             points = points[under_nS]
             trialsNeeded = trialsNeeded[under_nS]
 #        return points, trialsNeeded
 
-
         uniquePoints = np.unique(points)
-        uniqueTrials = np.zeros(uniquePoints.shape, dtype = np.int64)
+        uniqueTrials = np.zeros(uniquePoints.shape, dtype=np.int64)
         for i, up in enumerate(uniquePoints):
             uniqueTrials[i] = min(trialsNeeded[points == up])
 
         return uniquePoints, uniqueTrials
 
-    def all_points_and_trials_kolling(self, preserve_all = False):
+    def all_points_and_trials_kolling(self, preserve_all=False):
         """ Calculates all the possible points attainable during this task, and
         all the possible number of trials in which the agent could have gotten
         each of these points.
@@ -817,26 +805,26 @@ class betMDP(afc.Actinf):
 
         Vb = np.array(list(itertools.product(range(3), repeat=nP)))
         V = np.zeros(Vb.shape)
-        points = np.zeros(Vb.shape[0], dtype = int)
-        trials = np.zeros(Vb.shape[0], dtype = int)
+        points = np.zeros(Vb.shape[0], dtype=int)
+        trials = np.zeros(Vb.shape[0], dtype=int)
         for r, row in enumerate(Vb):
             for t, val in enumerate(row):
-                V[r, t] = (val == 1)*rL[t] + (val == 2)*rH[t]
-                points[r] = V[r,:].sum()
-                trials[r] = self.nT - Vb[r, Vb[r,:]==0].size
+                V[r, t] = (val == 1) * rL[t] + (val == 2) * rH[t]
+                points[r] = V[r, :].sum()
+                trials[r] = self.nT - Vb[r, Vb[r, :] == 0].size
 
         if preserve_all is False:
-            under_thres = points<self.thres
+            under_thres = points < self.thres
             points = points[under_thres]
             trials = trials[under_thres]
         else:
-            #Eliminate those past nS
-            under_nS = points<self.nS
+            # Eliminate those past nS
+            under_nS = points < self.nS
             points = points[under_nS]
             trials = trials[under_nS]
 
         uniquePoints = np.unique(points)
-        uniqueTrials = np.zeros(uniquePoints.shape, dtype = int)
+        uniqueTrials = np.zeros(uniquePoints.shape, dtype=int)
         for i, up in enumerate(uniquePoints):
             uniqueTrials[i] = min(trials[points == up])
 
