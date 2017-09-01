@@ -21,14 +21,15 @@ import itertools
 import argparse
 from os import getpid
 from time import time
-#import ipdb
+import ipdb
 
 import numpy as np
 
 import betClass as bc
+import import_data as imda
 
 
-def return_default_shape_pars(shape=None, alpha=False):
+def return_default_pars(shape=None, alpha=False, bias=False):
     r""" Returns the values of shape_pars which have been used for the inversion
     in __main__. Optionally, it can return the values of alpha too.
 
@@ -38,6 +39,10 @@ def return_default_shape_pars(shape=None, alpha=False):
     If alpha is set to True, the vector of alpha values used for inversion will
     be returned alongside as a second output.
     """
+
+    if bias:
+        return np.linspace(0, 1, 10, endpoint=False)[1:]
+
     out_shapes = [['unimodal_s', np.arange(-15, 45 + 1), np.arange(1, 15 + 1)],
                   ['sigmoid_s', np.arange(-15, 15 + 1), np.arange(1, 30, 2)],
                   ['exponential', np.arange(5, 100, 2)]]
@@ -52,21 +57,33 @@ def return_default_shape_pars(shape=None, alpha=False):
         output = shape_pars[0]
     if alpha:
         output = [output, out_alpha]
+
     return output
 
 
 def __rds__(*args, **kwargs):
-    """ Short-hand for calling return_default_shape_pars(). """
-    return return_default_shape_pars(*args, **kwargs)
+    """ Short-hand for calling return_default_pars(). """
+    return return_default_pars(*args, **kwargs)
 
 
-def switch_shape_pars(shape_pars):
+def switch_shape_pars(shape_pars, force=None):
     """Switches shape pars of the form ['shape', [par1], [par2]] to the
     shape ['shape', par1, par2] and viceversa.
+
+    Parameters
+    ----------
+    force: ['list', 'nolist']
+        If 'list', it will return always ['shape', [par1], ...]. If 'nolist'
+        it will return always ['shape', par1, ...].
     """
-    if isinstance(shape_pars[1], list):
+    try:
+        shape_pars[1][0]
+        if force == 'list':
+            return shape_pars
         shape_pars_out = [x[0] for x in shape_pars[1:]]
-    else:
+    except (TypeError, IndexError):
+        if force == 'nolist':
+            return shape_pars
         shape_pars_out = [[x] for x in shape_pars[1:]]
 
     shape_pars_out.insert(0, shape_pars[0])
@@ -702,7 +719,7 @@ def check_data_file(subjects=None, trials=None,
         Returns True if all subjects/trials/parameters were found in the data
         file. False otherwise.
     """
-    import import_data as imda
+
     if not (isinstance(subjects, int) or len(subjects) == 1 or subjects is None):
         raise NotImplementedError('Only single subject is implemented')
     if subjects is None:
@@ -898,7 +915,6 @@ def invert_alpha(subjects, shape_pars, data_flat=None, alpha_vec=None,
     If they are not found, an attempt is made to create them. This can be toggled
     on by create_qs = False.
     """
-    import import_data as imda
 
     if q_seen is None:
         q_seen_flag = False
@@ -998,6 +1014,17 @@ def create_Q_file_subject(subject, shape='unimodal_s', logs_path=None, outs_path
         pickle.dump(q_seen, mafi)
 
 
+def transform_shape_pars(shape_indices):
+    """Transforms the weird index-based shape_pars into the value-based ones."""
+    shape_pars_vec = __rds__(shape_indices[0])
+    shape_values = [shape_pars_vec[0], ]
+    for index, par_index in enumerate(shape_indices):
+        if index == 0:
+            continue
+        shape_values.append(shape_pars_vec[index][par_index])
+    return shape_values
+
+
 def calculate_likelihood_by_condition(subjects=[0, ], save=False):
     """Calculates the likelihood for the given subjects for all parameters,
     including alpha, separated by condition. Saves to file.
@@ -1049,6 +1076,113 @@ def calculate_likelihood_by_condition(subjects=[0, ], save=False):
                     with open(file_name, 'wb') as mafi:
                         pickle.dump(logli_save, mafi)
     return logli_out
+
+
+def infer_bias(subjects=None, bias_vec=None, shape_pars=None, alphas=None, filename=None):
+    """Infers the bias parameter for a model that assumes that all subjects
+    have the same shape_pars, and the inter-subject differences are due to a
+    bias towards risky or safe.
+
+    Parameters
+    ----------
+    subjects: list of ints
+    bias_vec: list of floats
+        Values for the grid search over the bias parameter.
+    shape_pars: ['shape', par1, par2, ...]
+        Assumed shape for all subjects. If None is given, one is inferred by
+        doing the full grid search.
+
+    Returns
+    -------
+    logli: dict, keys are alpha values
+        Dictionary whose keys are the alpha values in __rds__(), and whose values
+        are the loglikelihood maps for the bias_vec.
+    """
+    if shape_pars is None:
+        _, shape_pars = maximum_likelihood_all_data(subjects)
+    if bias_vec is None:
+        bias_vec = __rds__(bias=True)
+    if subjects is None:
+        subjects = range(35)
+    if alphas is None:
+        _, alphas = __rds__(alpha=True)
+
+    shape_pars = switch_shape_pars(shape_pars, force='list')
+    shape = shape_pars[0]
+    q_file_base = './data/qus_subj_%s_%s.pi'
+    _, data_flat = imda.main()
+
+    bias_logli = {}
+    for subject in subjects:
+        for alpha in alphas:
+            if alpha not in bias_logli:
+                bias_logli[alpha] = np.zeros(len(bias_vec))
+            q_file = q_file_base % (subject, shape)
+            as_seen = calculate_posta_from_Q(
+                alpha, q_file, guardar=False, regresar=True)
+            for ix_bias, bias in enumerate(bias_vec):
+                _bias_as_seen(bias, as_seen)
+                logli, _, _, _, _, _ = infer_parameters(
+                    data_flat=data_flat[subject], as_seen=as_seen, shape_pars=shape_pars)
+                if logli < -10000:
+                    ipdb.set_trace()
+                    return None
+                bias_logli[alpha][ix_bias] += logli[0][0]
+    if filename is None:
+        filename = './data/bias_logli.pi'
+    with open(filename, 'wb') as mafi:
+        pickle.dump(bias_logli, mafi)
+
+    return bias_logli
+
+
+def _bias_as_seen(bias, as_seen):
+    """Applies the bias to all values in --as_seen--."""
+    for key in as_seen.keys():
+        as_seen[key][0] *= np.array([1 - bias, bias])
+        as_seen[key][0] /= as_seen[key][0].sum()
+
+
+def maximum_likelihood_all_data(subjects):
+    """Finds the model's maximum loglikelihood for all the data, assuming no
+    inter-subject variations.
+
+    Returns
+    -------
+    max_logli: float
+        Maximum log-likelihood of all models.
+    shape_pars: ['shape', par1, par2, ...]
+        Model with the maximum likelihood
+    """
+    shape_pars_all = __rds__()
+    shapes = [x[0] for x in shape_pars_all]
+
+    logli_filename_base = './data/alpha_logli_subj_%s_%s.pi'
+    logli_full_model = {}
+    logli_subject = {}
+    for subject in subjects:
+        logli_subject[subject] = 0
+        for shape in shapes:
+            logli_filename = logli_filename_base % (subject, shape)
+            with open(logli_filename, 'rb') as mafi:
+                logli = pickle.load(mafi)
+            # ipdb.set_trace()
+            for key in logli:
+                if (key, shape) in logli_full_model:
+                    logli_full_model[(key, shape)] += logli[key]
+                else:
+                    logli_full_model[(key, shape)] = logli[key]
+    max_logli = -np.inf
+    for key in logli_full_model.keys():
+        cix_logli = np.unravel_index(
+            logli_full_model[key].argmax(), logli_full_model[key].shape)
+        c_logli = logli_full_model[key][cix_logli]
+        if max_logli < c_logli:
+            max_logli = c_logli
+            shape_pars_ix = list(cix_logli)
+            shape_pars_ix.insert(0, key[1])
+            shape_pars = transform_shape_pars(shape_pars_ix)
+    return max_logli, shape_pars
 
 
 def main(data_type, shape_pars, subject=0, data_flat=None,
@@ -1128,7 +1262,6 @@ def main(data_type, shape_pars, subject=0, data_flat=None,
     """
 
     path_to_data = None
-    import import_data as imda
     if data_flat is None:
         data = imda.import_kolling_data(path_to_data)
         data = imda.clean_data(data)
