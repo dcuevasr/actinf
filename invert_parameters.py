@@ -29,7 +29,7 @@ import betClass as bc
 import import_data as imda
 
 
-def return_default_pars(shape=None, alpha=False, bias=False):
+def return_default_pars(shape=None, alpha=False, bias=False, end_values=False):
     r""" Returns the values of shape_pars which have been used for the inversion
     in __main__. Optionally, it can return the values of alpha too.
 
@@ -42,10 +42,17 @@ def return_default_pars(shape=None, alpha=False, bias=False):
 
     if bias:
         return np.linspace(0, 1, 10, endpoint=False)[1:]
+    if end_values:
+        divisor = 10
+        var_type = 'float64'
+    else:
+        divisor = 1
+        var_type = 'int64'
 
     out_shapes = [['unimodal_s', np.arange(-15, 45 + 1), np.arange(1, 15 + 1)],
-                  ['sigmoid_s', np.arange(-15, 15 + 1), np.arange(1, 30, 2)],
-                  ['exponential', np.arange(5, 100, 2)]]
+                  ['sigmoid_s', np.arange(-15, 15 + 1),
+                   np.arange(1, 30, 2, dtype=var_type) / divisor],
+                  ['exponential', np.arange(5, 100, 2, dtype=var_type) / divisor]]
     out_alpha = np.hstack(
         [np.linspace(1, 50, 50) / 10, np.linspace(10.0, 50.0, 5)])
     if shape is None:

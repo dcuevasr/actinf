@@ -1833,7 +1833,7 @@ def akaike_compare(subjects=None):
     return aic_all, aic_sub
 
 
-def maximum_likelihood_all_data(subjects):
+def maximum_likelihood_all_data(subjects, shapes=None):
     """Finds the model's maximum loglikelihood for all the data, assuming no
     inter-subject variations.
 
@@ -1844,8 +1844,9 @@ def maximum_likelihood_all_data(subjects):
     shape_pars: ['shape', par1, par2, ...]
         Model with the maximum likelihood
     """
-    shape_pars_all = invp.__rds__()
-    shapes = [x[0] for x in shape_pars_all]
+    if shapes is None:
+        shape_pars_all = invp.__rds__()
+        shapes = [x[0] for x in shape_pars_all]
 
     logli_filename_base = './data/alpha_logli_subj_%s_%s.pi'
     logli_full_model = {}
@@ -1872,7 +1873,85 @@ def maximum_likelihood_all_data(subjects):
             shape_pars_ix = list(cix_logli)
             shape_pars_ix.insert(0, key[1])
             shape_pars = transform_shape_pars(shape_pars_ix)
+
     return max_logli, shape_pars
+
+
+def maximum_likelihood_per_subject(subjects, shapes=None):
+    """Finds the model's maximum loglikelihood for all the data, assuming that
+    there is inter-subject variations.
+    """
+    if shapes is None:
+        shape_pars_all = invp.__rds__()
+        shapes = [x[0] for x in shape_pars_all]
+
+    best_models = loop_rank_likelihoods(subjects, shapes=shapes, number_save=1)
+
+    max_logli = 0
+    for subject in subjects:
+        max_logli += best_models[subject][0][0]
+
+    return max_logli
+
+
+def table_chi_square():
+    """ Prints a table of significance values for different models."""
+
+    from scipy import stats as st
+    shapes = ['unimodal_s', 'sigmoid_s', 'exponential']
+
+    # Models with no inter-subject variability
+    max_logli_without = {}
+    for shape in shapes:
+        max_logli_without[shape] = maximum_likelihood_all_data(
+            range(35), shapes=[shape, ])[0]
+    max_logli_without['all'] = maximum_likelihood_all_data(range(35))[0]
+    k_without = {'all': 4, 'unimodal_s': 3, 'sigmoid_s': 3, 'exponential': 2}
+
+    # Models with inter-subject variability
+    max_logli_with = {}
+    k_with = {}
+    for shape in shapes:
+        max_logli_with[shape] = maximum_likelihood_per_subject(
+            range(35), shapes=[shape, ])
+        k_with[shape] = k_without[shape] * 35
+    max_logli_with['all'] = maximum_likelihood_per_subject(range(35))
+    k_with['all'] = k_without['all'] * 35
+
+    with open('./models_delete.pi', 'wb') as mafi:
+        pickle.dump([max_logli_with, k_with,
+                     max_logli_without, k_without], mafi)
+
+    chi2 = {}
+    for model0 in max_logli_without:
+        for model1 in max_logli_with:
+            chi2[model0, model1] = 1 - st.chi2.cdf(
+                - 2 * (max_logli_without[model0] - max_logli_with[model1]), k_with[model1] - k_without[model0])
+    chi2_within = {}
+    for model0 in max_logli_without:
+        for model1 in max_logli_without:
+            chi2_within[model0, model1] = 1 - st.chi2.cdf(
+                - 2 * (max_logli_without[model0] - max_logli_without[model1]), k_without[model1] - k_without[model0])
+
+    all_models = {}
+    for model in max_logli_without:
+        all_models[model + '_wo'] = [max_logli_without[model], k_without[model]]
+        all_models[model + '_wi'] = [max_logli_with[model], k_with[model]]
+    diff_bic = {}
+    for model0 in all_models:
+        for model1 in all_models:
+            diff_bic[(model0, model1)] = (all_models[model0][1] - all_models[model1][1]) * \
+                np.log(384 * 35) - 2 * \
+                (all_models[model0][0] - all_models[model1][0])
+
+    bic = {}
+    flag_ipdb = 1
+    for model in all_models:
+        bic[model] = all_models[model][1] * \
+            np.log(384 * 35) - 2 * all_models[model][0]
+        if flag_ipdb == 1:
+            ipdb.set_trace()
+    return chi2, chi2_within, bic, diff_bic
 
 
 def rank_likelihoods(subject, shapes=None, number_save=2, force_rule=False):
@@ -1950,7 +2029,7 @@ def rank_likelihoods_cond(subject, number_save=5, force_rule=False):
 
 
 def loop_rank_likelihoods(subjects=None, number_save=1, shapes=None,
-                          cond=False, force_rule=True):
+                          cond=False, force_rule=True, no_logli=False):
     """Loops over rank_likelihoods or rank_likelihoods_cond, depending on --cond--."""
     if subjects is None:
         subjects = range(35)
@@ -1961,9 +2040,12 @@ def loop_rank_likelihoods(subjects=None, number_save=1, shapes=None,
 
     best_model = {}
     for subject in subjects:
-        best_model[subject] = ranking_function(
+        logli, best_key = ranking_function(
             subject, number_save=number_save, force_rule=force_rule, shapes=shapes)
-
+        if no_logli:
+            best_model[subject] = best_key
+        else:
+            best_model[subject] = (logli, best_key)
     return best_model
 
 
@@ -2054,17 +2136,18 @@ def _plot_decisions(maax, shape_pars, posteriors, deci):
     maax.legend(fontsize=12)
 
 
-def posta_best(subjects=None):
+def posta_best(subjects=None, shapes=None):
     """Calculates the posteriors over actions for the best model (including alpha)
     and saves to the file best_subj_#.pi.
     """
+
     if subjects is None:
         subjects = range(35)
     if isinstance(subjects, int):
         subjects = subjects,
 
     for subject in tqdm(subjects):
-        _, best_key = rank_likelihoods(subject, number_save=1)
+        _, best_key = rank_likelihoods(subject, number_save=1, shapes=shapes)
         alpha = best_key[0][0]
         shape_pars = best_key[0][1]
         q_filename = './data/qus_subj_%s_%s.pi' % (subject, shape_pars[0])
@@ -2073,7 +2156,8 @@ def posta_best(subjects=None):
 
 
 def average_risky(subjects=(0,)):
-    """Calculates the average probability of choosing risky for the given subjects.
+    """Calculates the average probability of choosing risky for the given 
+    subjects.
 
     The data comes from the files ./data/best_model_posta_subj_0.pi.
     """
@@ -2089,16 +2173,26 @@ def average_risky(subjects=(0,)):
             as_seen = pickle.load(mafi)
         _, keyest = rank_likelihoods(subject)
         shape_pars = invp.switch_shape_pars(keyest[0][1])
-        _, posta, _, _, _, _ = invp.infer_parameters(data_flat=flata[subject], as_seen=as_seen,
+        _, posta, _, _, _, _ = invp.infer_parameters(data_flat=flata[subject],
+                                                     as_seen=as_seen,
                                                      shape_pars=shape_pars)
         posta = np.squeeze(posta)
         statistics[subject] = (posta[:, 1].mean(), posta[:, 1].std())
     return statistics
 
 
-def _one_agent_one_obs(subjects=(0, 1)):
-    """Retrieves the posterior distributions over actions for the subjects, using the best
-    available model.
+def _one_agent_one_obs(subjects=(0, 1), best_keys=None, shapes=None):
+    """Retrieves the posterior distributions over actions for the subjects, 
+    using the best available model.
+
+    Parameters
+    ----------
+    best_keys: list of list
+        A list with one element per subject. Each element should be of the form 
+        [alpha, shape_pars].
+    shapes: list of strings
+        Which shapes to consider for the best_keys. Even if only one is given, it
+        must be in a list. E.g. ['exponential']
 
     Returns
     -------
@@ -2109,14 +2203,22 @@ def _one_agent_one_obs(subjects=(0, 1)):
     _, flata = imda.main()
     posta_all = {}
     risk_pressure = calc_risk_pressure(flata)
-    for subject in subjects:
-        _, best_key = rank_likelihoods(subject, number_save=1)
-        shape_pars = invp.switch_shape_pars(best_key[0][1])
+    for ix_sub, subject in enumerate(subjects):
+        flag_calculate = True
+        if best_keys is None:
+            _, best_key = rank_likelihoods(
+                subject, number_save=1, shapes=shapes)
+            try:
+                with open('./data/best_model_posta_subj_%s.pi' % subject, 'rb') as mafi:
+                    as_seen = pickle.load(mafi)
+                    flag_calculate = False
+            except FileNotFoundError:
+                flag_calculate = True
+        else:
+            best_key = [best_keys[ix_sub]]
+        shape_pars = invp.switch_shape_pars(best_key[0][1], force='list')
         alpha = best_key[0][0]
-        try:
-            with open('./data/best_model_posta_subj_%s.pi' % subject, 'rb') as mafi:
-                as_seen = pickle.load(mafi)
-        except FileNotFoundError:
+        if flag_calculate is True:
             q_seen = invp.load_or_calculate_q_file(
                 subject, shape_pars[0], create=False)
             as_seen = invp.calculate_posta_from_Q(alpha, q_seen, guardar=False,
@@ -2139,7 +2241,7 @@ def _one_agent_many_obs(subjects=(0, 1), subjects_data=None):
     subjects: array_like
     subjects_data: array_like, defaults to --subjects--
         Subjects from which the data will be taken. Every subject in --subjects-- will be
-        exposed to the data of every subject in --subjects_data--. 
+        exposed to the data of every subject in --subjects_data--.
 
     Returns
     -------
@@ -2181,13 +2283,15 @@ def _one_agent_many_obs(subjects=(0, 1), subjects_data=None):
     return posta_all
 
 
-def _plot_rp_vs_risky_own(subjects, axes, posta_all=None, regresar=False):
+def _plot_rp_vs_risky_own(subjects, axes=None, posta_all=None, regresar=False,
+                          color=None, shapes=None):
     """Plots the probability of risky against risk pressure for the best model
     for each of the subjects in --subjects--.
 
     The plot of each subject is sent to the corresponding axis in --axes--.
 
-    Parameters:
+    Parameters
+    ----------
     subjects: int or list of ints.
     axes: list of pyplot axes.
         One axis must be given for each subject. Plots will be plotted there.
@@ -2196,20 +2300,52 @@ def _plot_rp_vs_risky_own(subjects, axes, posta_all=None, regresar=False):
     if isinstance(subjects, int):
         subjects = subjects,
 
+    if axes is None:
+        s1, s2 = calc_subplots(len(subjects))
+        axes = plt.subplots(s1, s2)[1]
+        axes = np.reshape(axes, -1)
+
     if posta_all is None:
-        posta_all = _one_agent_one_obs(subjects)
+        posta_all = _one_agent_one_obs(subjects, shapes=shapes)
 
     for ix_sub, subject in enumerate(subjects):
         maax = axes[ix_sub]
         cposta = posta_all[subject]['posta']
         c_risk_pr = posta_all[subject]['rp']
-        _rp_vs_risky_subplot(c_risk_pr, cposta, maax, color='green')
+        _rp_vs_risky_subplot(c_risk_pr, cposta, maax, color=color)
 
     if regresar:
         return posta_all
 
 
-def _plot_rp_vs_risky_all(subjects, axes, subjects_data=None, posta_all=None, regresar=False):
+def plot_custom_rp_vs_risky(subjects, keys, force_alpha=None, fignum=23):
+    """Draws a plot for each subject in --subjects--, using the corresponding key in 
+    --keys--.
+
+    Parameters
+    ----------
+    keys: dict
+        For each subject, this dict should have an element of the form
+        [alpha, [shape, par1, par2, ...]].
+    force_alpha: float
+        This alpha will be forced for all subjects, regardless of what --keys-- says.
+    """
+    if force_alpha is not None:
+        for key in keys:
+            keys[key][0][0] = force_alpha
+
+    s1, s2 = calc_subplots(len(subjects))
+    fig = plt.figure(fignum)
+    for ix_subj, subject in enumerate(subjects):
+        maax = plt.subplot(s1, s2, ix_subj + 1)
+        posta_all = _one_agent_one_obs(
+            subjects=(subject,), best_keys=keys[ix_subj])
+        _plot_rp_vs_risky_own(subjects=(subject,),
+                              posta_all=posta_all, axes=(maax,))
+
+
+def _plot_rp_vs_risky_all(subjects, axes, subjects_data=None,
+                          posta_all=None, regresar=False, color=None):
     """Plots the probability of risky against risk pressure for the best model
     for each of the subjects in --subjects--, for all of each other's observations.
     """
@@ -2225,20 +2361,23 @@ def _plot_rp_vs_risky_all(subjects, axes, subjects_data=None, posta_all=None, re
         cposta = posta_all[subject]['posta']
         c_risk_pressure = posta_all[subject]['rp']
         _rp_vs_risky_subplot(c_risk_pressure, cposta,
-                             axes[ix_subj], color='green', alpha=0.3)
+                             axes[ix_subj], color=color, alpha=1)
     if regresar:
         return posta_all
 
 
-def _plot_average_risk_dynamics(posta_rp, maaxes, step_size=1, legend='', regresar=False):
+def _plot_average_risk_dynamics(posta_rp, maaxes, step_size=1,
+                                legend='', regresar=False, color=None):
     """Plots the average posterior probability of risky."""
+    # color = 'brown'  # figure_colors('lines_cmap')(0.5)
     for ix_cpr, key_cpr in enumerate(posta_rp):
         c_posta = posta_rp[key_cpr]['posta']
         c_risk_pressure = posta_rp[key_cpr]['rp']
         average_rp, std_rp = _average_risk_dynamics(c_posta, c_risk_pressure)
         plot_x = np.arange(0, 35, step_size)
-        maaxes[ix_cpr].errorbar(
-            plot_x, average_rp, std_rp, linewidth=2, label=legend)
+        maaxes[ix_cpr].plot(average_rp, linewidth=2, label=legend, color=color)
+        # maaxes[ix_cpr].errorbar(
+        #     plot_x, average_rp, std_rp, linewidth=2, label=legend, color=color)
         maaxes[ix_cpr].set_ylim([0, 1])
     if regresar:
         return average_rp, std_rp
@@ -2266,7 +2405,8 @@ def _average_risk_dynamics(posta, risk_pressure, step_size=1):
 
 def _rp_vs_risky_subplot(risk_pr, posta, maax, color=None, alpha=1):
     """Makes the subplots for figure_rp_vs_risky()."""
-    color = figure_colors('one line')
+    if color is None:
+        color = figure_colors('one line')
     for point, rp in enumerate(risk_pr):
         if rp > 35:
             continue
@@ -2355,6 +2495,41 @@ def akaike_family(subjects=(0,), fixed_pars=False, just_diffs=False):
     return AIC
 
 
+def BIC_family(subjects=(0,), fixed_pars=False, data_points=384,
+               just_diffs=False):
+    """Returns the BIC values (or differences) for the given subjects.
+
+    Parameters
+    ----------
+    just_ratios: bool
+        If True, the BIC ratios are returned instead of the values.
+    """
+    shape_pars_all = invp.__rds__()
+    shapes = [shape_pars[0] for shape_pars in shape_pars_all]
+    if fixed_pars:
+        number_k = {shape_pars[0]: 0 for shape_pars in shape_pars_all}
+    else:
+        number_k = {shape_pars[0]: len(shape_pars[1:]) + 1
+                    for shape_pars in shape_pars_all}
+
+    BIC = {}
+    for shape in shapes:
+        best_models = loop_rank_likelihoods(
+            subjects=subjects, shapes=[shape], number_save=1)
+        for subject in best_models.keys():
+            BIC[(subject, shape)] = np.log(data_points) * number_k[shape] - \
+                2 * best_models[subject][0][0]
+    if just_diffs:
+        for subject in subjects:
+            min_BIC = np.inf
+            for shape in shapes:
+                min_BIC = min(BIC[(subject, shape)], min_BIC)
+            for shape in shapes:
+                BIC[(subject, shape)] -= min_BIC
+
+    return BIC
+
+
 def ML_family(subjects, just_ratios=False):
     """Returns the ML for each shape, for the given subjects.
 
@@ -2386,7 +2561,7 @@ def ML_family(subjects, just_ratios=False):
 def BF_family(subjects, just_ratios=False):
     """Returns the Bayesian factor for each shape, for the given subjects.
 
-    If just_ratios=True, then only the ratios of the factors to the maximum 
+    If just_ratios=True, then only the ratios of the factors to the maximum
     are returned.
     """
     logli_file_base = './data/alpha_logli_subj_%s_%s.pi'
@@ -2457,6 +2632,9 @@ def _get_data_priors(subjects, criterion='AIC'):
     elif criterion == 'BF':
         ranking = BF_family(subjects, just_ratios=True)
         value_comparison = 1
+    elif criterion == 'BIC':
+        ranking = BIC_family(subjects, just_diffs=True)
+        value_comparison = 0
 
     #_significance_family(ranking, criterion)
 
@@ -2494,8 +2672,8 @@ def _significance_family(ranking, criterion):
 
 
 def performance_subjects_maxlogli(subjects, nparray=False):
-    """Finds the performance of the set of parameters with the maximum likelihood for 
-    each subject. Because performance was not calculated by all parameter values in 
+    """Finds the performance of the set of parameters with the maximum likelihood for
+    each subject. Because performance was not calculated by all parameter values in
     invp.__rds__(), some measure of distance is used to do the mapping.
     """
     best_models = loop_rank_likelihoods(subjects)
@@ -2516,7 +2694,7 @@ def performance_subjects_maxlogli(subjects, nparray=False):
 
 
 def _find_closest_pars_performance(alpha_shape_pars, perdict):
-    """Finds the key in --perdict-- closest to alpha_shape_pars and returns its 
+    """Finds the key in --perdict-- closest to alpha_shape_pars and returns its
     performance.
     """
     min_diff = np.inf
@@ -2603,6 +2781,149 @@ def loop_fit_rp_shape(subjects):
     plt.show(block=False)
 
 
+def plot_stefan_retreat():
+    """Plots for the slides Stefan used in the SFB retreat in Radebeul."""
+    # fig = plt.figure(figsize=[7, 4])
+    AB = 'ABCD'
+    fig = []
+    figsize = [4, 3]
+    fontsize = 18
+    for ix_subj, subject in enumerate((1, 2, 5)):
+        # maax = plt.subplot(2, 2, ix_subj + 1)
+        cfig = plt.figure(ix_subj, figsize=figsize)
+        plt.clf()
+        fig.append(cfig)
+        maax = plt.subplot(1, 1, 1)
+        posta_one = _plot_rp_vs_risky_own(
+            subject, [maax], regresar=True, color='green')
+        posta_one_s = {subject: posta_one[subject]}
+        avg_one, std_one = _plot_average_risk_dynamics(
+            posta_one_s, [maax], legend='Own contexts', regresar=True, color='brown')
+        maax.set_xlabel('Risk pressure', fontsize=fontsize)
+        maax.set_ylim([0, 1])
+        maax.set_yticks([0.25, 0.5])
+        mala = maax.set_ylabel('P(risky)', fontsize=fontsize)
+        mala.set_multialignment('center')
+        maax.set_title('Subject %s' % AB[ix_subj], fontsize=fontsize)
+
+    # maax = plt.subplot(2, 2, 4)
+    cfig = plt.figure(3, figsize=[6, 4])
+    fig.append(cfig)
+    plt.clf()
+    maax = plt.subplot(1, 1, 1)
+    maax.bar((1, 2, 3), (9, 15, 11), align='center', color='brown')
+    maax.set_xticks((1, 2, 3))
+    maax.set_xticklabels(['Up', 'Down', 'None'], fontsize=fontsize)
+    maax.set_title('Classification of subjects', fontsize=fontsize)
+    plt.tight_layout()
+    plt.show(block=False)
+
+    for ix_subj in range(4):
+        plt.figure(ix_subj)
+        plt.tight_layout()
+        plt.savefig('./retreat_%s' % ix_subj, dpi=300)
+
+
+def likelihood_map_exponential(subjects):
+    """Creates a matrix per subject with the data likelihoods for all values of the
+    parameter in the exponential and the values of alpha.
+
+    Returns
+    -------
+    likelihoods: list of matrices
+        Every matrix is the likelihood map for one subject, with \alpha on the first
+        coordinate and \kappa in the second.
+
+    """
+    all_pars, alphas = invp.__rds__('exponential', alpha=True)
+    num_vals = len(all_pars[1])
+    num_alphas = len(alphas)
+
+    likelihoods = dict()
+    for subject in subjects:
+        likelihoods[subject] = -np.inf * np.ones((num_alphas, num_vals))
+        with open('./data/alpha_logli_subj_%s_exponential.pi' % subject, 'rb') as mafi:
+            logli = pickle.load(mafi)
+        logli_keys = np.array(list(logli.keys()))
+        logli_keys.sort()
+        for ix_alpha, alpha in enumerate(logli_keys):
+            tmp_logli = np.exp(logli[alpha] - logli[alpha].max())
+            likelihoods[subject][ix_alpha, :] = tmp_logli  # / tmp_logli.sum()
+            # if ix_alpha == 0:
+            #     ipdb.set_trace()
+        likelihoods[subject] /= likelihoods[subject].sum()
+
+    return likelihoods
+
+
+def plot_likelimap_exponential(subjects, fignum=22):
+    """Plots the likelihood map for all values of alpha and all parameters of the exponential
+    for the given subject.
+    """
+
+    fig = plt.figure(fignum, figsize=[25, 20])
+    fig.clf()
+    likelihoods = likelihood_map_exponential(subjects)
+
+    all_pars, alphas = invp.__rds__('exponential', alpha=True)
+
+    alpha_ticklabels = np.hstack(
+        [np.arange(0.5, 5, 0.5), np.array([5, 20, 50])])
+    alpha_ticks = [np.where(alphas == x)[0] for x in alpha_ticklabels]
+
+    kappa_ticks = range(0, len(all_pars[1]), 4)
+    kappa_ticklabels = all_pars[1][kappa_ticks].astype(int)
+
+    s2, s1 = calc_subplots(len(subjects))
+
+    for ix_sub, subject in enumerate(subjects):
+        maax = plt.subplot(s1, s2, ix_sub + 1)
+        maax.imshow(likelihoods[subject], interpolation='none')
+        plt.set_cmap('gray_r')
+        maax.set_xticks(kappa_ticks)
+        maax.set_xticklabels(kappa_ticklabels, fontsize=8)
+        # maax.set_xticklabels(all_pars[1])
+        maax.set_yticks(alpha_ticks)
+        maax.set_yticklabels(alpha_ticklabels, fontsize=8)
+
+        maax.set_ylabel(r'$\alpha$')
+        maax.set_xlabel(r'$\kappa$')
+    plt.tight_layout()
+    plt.show(block=False)
+
+
+def model_selection_shape_families():
+    """Calculates the BIC of each shape family: how well each family predicts subject
+    variations.
+
+    This is done to prove that the exponential family dominates the evidence game. If you
+    don't like it, take it up with management.
+    """
+    shape_pars_all = invp.__rds__()
+    shapes = [shape_pars[0] for shape_pars in shape_pars_all]
+    num_data_points = np.log(384 * 35)
+
+    k_shape = {'unimodal_s': 3, 'sigmoid_s': 3, 'exponential': 2}
+
+    bic = {}
+    for shape in shapes:
+        logli = maximum_likelihood_per_subject(range(35), shapes=[shape])
+        bic[shape] = 35 * k_shape[shape] * num_data_points - 2 * logli
+
+    return bic
+
+
+def rp_vs_risky_by_shape(subjects, shape_pars, alpha=1):
+    """Plots rp vs p(risky) given the data for the subject and the model given by --shape_pars--.
+
+    Parameters
+    ----------
+    shape_pars: list
+        List of the form ['shape', par1val, par2val, ..., parNval]
+    """
+    pass
+
+
 def table_best_families(subjects, criterion='AIC'):
     """Creates a table for the paper, in which the best shape is selected for each subject.
     Subjects are grouped by shapes. The criterion used can either be maximum likelihood,
@@ -2622,6 +2943,8 @@ def table_best_families(subjects, criterion='AIC'):
         table_headers.append('Likelihood ratios')
     elif criterion == 'BF':
         table_headers.append('Bayesian factors')
+    elif criterion == 'BIC':
+        table_headers.append('BIC')
     else:
         raise ValueError('Wrong criterion given')
 
@@ -2688,8 +3011,8 @@ def figure_shapes(number_shapes=5, force_rule=True, fignum=102):
     def plot_shape(shape_to_plot, maax, label=None, color='black'):
         """Plots the shape and the threshold line on the --ax-- provided."""
         shape_to_plot /= shape_to_plot.max()
-        ax.plot(shape_to_plot, label=label, color=color)
-        if maax.is_first_col() and ax.is_last_row():
+        maax.plot(shape_to_plot, label=label, color=color)
+        if maax.is_first_col() and maax.is_last_row():
             maax.set_xticks(range(0, mabes.nS, np.floor(
                 np.floor(mabes.nS / 5 / 10) * 10).astype(int)))
             maax.set_xlabel('Accumulated points')
@@ -2700,9 +3023,24 @@ def figure_shapes(number_shapes=5, force_rule=True, fignum=102):
             maax.set_yticks([])
             maax.set_ylabel('')
         maax.set_ylim([0, 1.2])
+
+    def plot_shades_and_labels(mabes, mafig):
+        all_axes = mafig.get_axes()
+        labels = 'ABCD'
+        for nplot, ax in enumerate(all_axes):
+            shaded_threshold = np.arange(mabes.thres, mabes.nS)
+            bg_color = figure_colors('past_threshold_background')
+            ax.fill_between(shaded_threshold, 0, ax.get_ylim()
+                            [-1], alpha=0.1, color=bg_color)
+            ax.set_title(labels[nplot], loc='left')
+            ax.set_label('Label via method')
+            if nplot != 0:
+                ax.legend(fontsize=6, loc='best')
+
     mabes = bc.betMDP(nS=72, thres=60)
 
     shape_pars_all = invp.__rds__()
+    shape_pars_labels = invp.__rds__(end_values=True)
 
     s1, s2 = calc_subplots(len(shape_pars_all) + 1)
     mafig = plt.figure(fignum, figsize=[6, 4])
@@ -2710,55 +3048,41 @@ def figure_shapes(number_shapes=5, force_rule=True, fignum=102):
 
     labels_pars = [[r'$\mu$', r'$\sigma$'], ['k', r'$x_0$'], ['a']]
 
+    shape_pars_all = [['unimodal_s', [-15, 0, 5], [15, 1, 5]],
+                      ['sigmoid_s', [-15, 0, 5], [2, 5, 20]],
+                      ['exponential', [5, 20, 100]]]
+    multiplier_shape = [[1, 1], [1, 0.1], [0.1, ]]
+    labels_all = [[r'$\mu$', r'$\sigma$'], ['k', r'$x_0$'], ['a', ]]
+
     for subp in range(len(shape_pars_all) + 1):
-        ax = plt.subplot(s1, s2, subp + 1)
+        maax = plt.subplot(s1, s2, subp + 1)
         if subp == 0:
             shape_to_plot = mabes.C[:mabes.nS]
-            plot_shape(shape_to_plot, ax, color=cmap(1.0))
+            plot_shape(shape_to_plot, maax, color=cmap(1.0))
         else:
-            prod_pars = list(itertools.product(*shape_pars_all[subp - 1][1:]))
-            if force_rule:
-                new_prod_pars = []
-                for ix_sp, prod in enumerate(prod_pars):
-                    shape_pars = list(prod)
-                    shape_pars.insert(0, shape_pars_all[subp - 1][0])
-                    if rules_for_shapes(shape_pars):
-                        new_prod_pars.append(prod)
-                prod_pars = new_prod_pars
-
-            plots_indices = np.linspace(
-                0, len(prod_pars), number_shapes, endpoint=False, dtype=int)
-            for ix, index in enumerate(plots_indices):
-                shape_pars = list(prod_pars[index])
-                shape_pars.insert(0, shape_pars_all[subp - 1][0])
-                label = ['%s = %2.0f' % (
-                    labels_pars[subp - 1][x], shape_pars[x + 1])
-                    for x in range(len(shape_pars[1:]))]
-                label_final = ''
-                for label_part in label:
-                    label_final += label_part + ', '
-                label_final = label_final[:-2]
+            shape_pars = shape_pars_all[subp - 1]
+            for ix_val in range(3):
+                c_shape_pars = [shape_pars[ix_el + 1][ix_val]
+                                for ix_el in range(len(shape_pars) - 1)]
+                c_shape_pars.insert(0, shape_pars[0])
 
                 shape_to_plot = mabes.set_prior_goals(
-                    shape_pars=shape_pars, convolute=False, cutoff=False, just_return=True)
-                plot_shape(shape_to_plot, ax, label=label_final,
-                           color=cmap(ix / number_shapes))
-    all_axes = mafig.get_axes()
-    labels = 'ABCD'
-    for nplot, ax in enumerate(all_axes):
-        shaded_threshold = np.arange(mabes.thres, mabes.nS)
-        bg_color = figure_colors('past_threshold_background')
-        ax.fill_between(shaded_threshold, 0, ax.get_ylim()
-                        [-1], alpha=0.1, color=bg_color)
-        ax.set_title(labels[nplot], loc='left')
-        ax.set_label('Label via method')
-        if nplot != 0:
-            ax.legend(fontsize=6, loc='upper left')
+                    shape_pars=c_shape_pars, convolute=False,
+                    cutoff=False, just_return=True)
+                label = ['%s = %2.1f, ' % (labels_all[subp - 1][c_par],
+                                           shape_pars[c_par + 1][ix_val] * multiplier_shape[subp - 1][c_par])
+                         for c_par in range(len(shape_pars) - 1)]
+                label_final = "".join(label)[:-2]
+                plot_shape(shape_to_plot, maax, label=label_final,
+                           color=cmap(ix_val / number_shapes))
+
+    plot_shades_and_labels(mabes, mafig)
+
     plt.tight_layout()
     plt.show(block=False)
 
 
-def figure_likelihood_map(subjects=(0,), number_shapes=5, fignum=103):
+def figure_likelihood_map(subjects=(4, 1), shapes=None, number_shapes=5, fignum=103):
     """Paper figure.
     Plots the best --number_shapes-- shapes for each subject, as defined by their likelihood.
     All shapes are plotted in black, while their transparency is determined by their
@@ -2766,6 +3090,8 @@ def figure_likelihood_map(subjects=(0,), number_shapes=5, fignum=103):
     quadratically (for effect).
 
     The \alpha parameter is sadly ignored here.
+
+    The defaults for --subjects-- are those used in the paper.
     """
     if isinstance(subjects, int):
         subjects = subjects,
@@ -2776,7 +3102,7 @@ def figure_likelihood_map(subjects=(0,), number_shapes=5, fignum=103):
     plt.clf()
 
     mabes = bc.betMDP(nS=72, thres=60)
-    color_shapes = {'unimodal_s': '#525fb9', 'sigmoid_s': '#3f923a',
+    color_shapes = {'unimodal_s': '#4286f4', 'sigmoid_s': '#f48f41',
                     'exponential': '#6b4f3f'}
     for ix_sub, subject in enumerate(subjects):
         maax = plt.subplot(s1, s2, ix_sub + 1)
@@ -2785,8 +3111,9 @@ def figure_likelihood_map(subjects=(0,), number_shapes=5, fignum=103):
         else:
             maax.set_title('%s' % subject, loc='left', fontsize=12)
         loglis, keys = rank_likelihoods(
-            subject, number_save=number_shapes, force_rule=True)
+            subject, shapes=shapes, number_save=number_shapes, force_rule=True)
         likelis = np.exp(loglis - loglis.max())
+
         for ix_likeli, likeli in enumerate(likelis):
             shape_pars = keys[ix_likeli][1]
             if not rules_for_shapes(shape_pars):
@@ -2838,8 +3165,29 @@ def figure_decisions(subject, shape_pars_sim=None, fignum=104):
     plt.show(block=False)
 
 
-def figure_rp_vs_risky(subjects=(0,), subjects_data=None, fignum=105):
-    """ asdf"""
+def figure_rp_vs_risky(subjects=(2, 4, 5), subjects_data=None, all_others=True,
+                       shapes=None, fignum=105):
+    """Plots risk pressure vs probability of risky choice for --subjects--. Additionaly, 
+    it plots risk pressure vs probability of the same subjects, but taking in all the
+    observations of all subjects together.
+
+    The defaults are those used for the paper.
+
+    Parameters
+    ----------
+    all_others: bool
+        Whether to expose all subjects in --subjects-- to each other's data (or to those in
+        --all_others-- (see below)). If set to True, a new column of subplots will be created.
+    subjects_data: array_like, defaults to --subjects--
+        Subjects from which the data will be taken. Every subject in --subjects-- will be
+        exposed to the data of every subject in --subjects_data--.
+    shapes: list of strings
+        Which shapes to consider for the best_keys. Even if only one is given, it
+        must be in a list. E.g. ['exponential']. This is just tunneled to other functions.
+
+
+    """
+    plt.rc('text', usetex=True)
 
     if subjects_data is None:
         subjects_data = subjects
@@ -2848,59 +3196,61 @@ def figure_rp_vs_risky(subjects=(0,), subjects_data=None, fignum=105):
         subjects = subjects,
     nsubs = len(subjects)
 
+    if all_others:
+        inner_subs = 2
+    else:
+        inner_subs = 1
+
+    color_dots = figure_colors('lines_cmap')(0.2)
+    color_avgs = 'brown'  # figure_colors('lines_cmap')(0.5)
+
     fig = plt.figure(fignum, figsize=[6, 6])
     fig.clf()
 
-    outer_grid = gs.GridSpec(nsubs, 1, wspace=0.2)
+    outer_grid = gs.GridSpec(nsubs, 1, hspace=0.3)
 
     fontdict = {'family': 'times new roman',
                 'size': 12}
-    AB = 'ABCDEFGHIJKHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
+    AB = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
     for ix_subj, subject in enumerate(subjects):
         inner_grid = gs.GridSpecFromSubplotSpec(
-            1, 2, subplot_spec=outer_grid[ix_subj], hspace=0.1, height_ratios=[1, 1])
+            1, inner_subs, subplot_spec=outer_grid[ix_subj], wspace=0.1, height_ratios=[1, 1])
         maax = plt.Subplot(fig, inner_grid[0])
-        posta_one = _plot_rp_vs_risky_own(subject, [maax], regresar=True)
+        posta_one = _plot_rp_vs_risky_own(
+            subject, [maax], regresar=True, color=color_dots, shapes=shapes)
         posta_one_s = {subject: posta_one[subject]}
         avg_one, std_one = _plot_average_risk_dynamics(
-            posta_one_s, [maax], legend='Own contexts', regresar=True)
-        maax.set_xticks([])
+            posta_one_s, [maax], legend='Own contexts', regresar=True, color=color_avgs)
+        maax.set_xlabel('Risk pressure')
         maax.set_ylim([0, 1])
         maax.set_yticks([0.25, 0.5])
-        maax.set_ylabel('P(risky)')
-        maax.set_title('Subject %s' % AB[ix_subj])
-        maax.text(0.5, 0.9, 'Own observations')
+        subject_label = '{\\fontsize{20pt}{3em}\\selectfont{}Subject %s}' % AB[ix_subj]
+        mala = maax.set_ylabel(
+            subject_label + '\n{\\fontsize{12pt}{3em}\\selectfont{}P(risky)}')
+        mala.set_multialignment('center')
+        maax.set_title('Own observations')
+        # maax.set_title('Subject %s' % AB[ix_subj])
+        # maax.text(0.5, 0.9, 'Own observations')
         fig.add_subplot(maax)
 
-        maax = plt.Subplot(fig, inner_grid[1])
-        posta_all = _plot_rp_vs_risky_all(
-            subject, [maax], subjects_data=subjects_data, regresar=True)
-        posta_all_s = {subject: posta_all[subject]}
-        avg_all, std_all = _plot_average_risk_dynamics(
-            posta_all_s, [maax], legend='All contexts', regresar=True)
-        maax.set_xticks([])
-        maax.set_ylim([0, 1])
-        maax.set_yticks([0.25, 0.5])
-        maax.set_ylabel('P(risky)')
+        if all_others:
+            maax = plt.Subplot(fig, inner_grid[1])
+            posta_all = _plot_rp_vs_risky_all(
+                subject, [maax], subjects_data=subjects_data, regresar=True,
+                color=color_dots, shapes=shapes)
+            posta_all_s = {subject: posta_all[subject]}
+            avg_all, std_all = _plot_average_risk_dynamics(
+                posta_all_s, [maax], legend='All contexts', regresar=True, color=color_avgs)
+            # maax.set_xticks([])
+            maax.set_xlabel('Risk pressure')
+            maax.set_ylim([0, 1])
+            maax.set_yticks([])
 
-        maax.text(0.5, 0.9, 'All observations')
-        fig.add_subplot(maax)
+            # maax.set_yticks([0.25, 0.5])
+            # maax.set_ylabel('P(risky)')
+            maax.set_title('All observations')
 
-        # maax = plt.Subplot(fig, inner_grid[2])
-        # avg_diff = np.abs(np.array(avg_one) - np.array(avg_all))
-        # maax.bar(np.arange(35), avg_diff)
-        # maax.set_xlabel('Risk pressure', fontdict=fontdict)
-        # maax.set_ylim([0, 0.3])
-        # if ix_subj == 0:
-        #     maax.set_ylabel('Difference\nin mean', fontdict=fontdict)
-        #     maax.set_yticks([0, 0.1, 0.2])
-        # else:
-        #     maax.set_yticks([])
-        # fig.add_subplot(maax)
-
-    #_rp_vs_risky_pretty(fig)
-    # plt.tight_layout()
-    # plt.subplots_adjust(top=0.9)
+    outer_grid.tight_layout(fig)
     plt.show(block=False)
 
 
@@ -2929,6 +3279,43 @@ def figure_one_agent_many_obs(subjects=(0, 1), subjects_data=None, fignum=106):
             posta_all[subject]['rp'], posta_all[subject]['posta'], maax)
     _rp_vs_risky_pretty(fig)
     plt.show(block=False)
+
+
+def figure_alpha_hist(subjects, fignum=107, divisors=None, shapes=None):
+    """ Paper figure.
+    Plots a histogram of the values for the alpha parameter for the all the given subjects.
+
+    """
+
+    if divisors is None:
+        divisors = (0, 0.5, 1, 1.5, 2, 3, 50)
+
+    best_pars = loop_rank_likelihoods(subjects, number_save=1, shapes=shapes)
+    alphas = []
+    for subject in subjects:
+        alphas.append(best_pars[subject][1][0][0])
+
+    hist, bins = np.histogram(alphas, bins=divisors)
+
+    x_tick_ranges = []
+    for ix_div, _ in enumerate(divisors[:-1]):
+        x_tick_ranges.append([divisors[ix_div], divisors[ix_div + 1]])
+    x_labels = []
+    for x_tick in x_tick_ranges[:-1]:
+        x_labels.append('[%2.1f, %2.1f)' % (x_tick[0], x_tick[1]))
+    x_labels.append('> %2.1f' % divisors[-2])
+
+    fig = plt.figure(fignum)
+    plt.clf()
+    maax = plt.gca()
+    maax.bar(range(len(hist)), hist, width=1, color='brown')
+    maax.set_title(r'Histogram of values of $\alpha$')
+    maax.set_xlabel(r'$\alpha$')
+    maax.set_ylabel(r'Number of subjects')
+    maax.set_xticks(np.arange(len(hist)) + 0.5)
+    maax.set_xticklabels(x_labels)
+    plt.show(block=False)
+    return alphas, hist, bins
 
 
 def figure_colors(element):
