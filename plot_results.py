@@ -1173,9 +1173,11 @@ def three_shapes_mc(retorno=True, subjects=None):
             pickle.dump(logli, mafi)
 
 
-def plot_three_shapes(logli, shapes=None, norm_const=1, fignum=15, normalize_together=False):
-    """ Plots the dictionary from the three_shapes() method; creates a plot with the
-    shapes of the goals, whose alpha (transparency) is given by their likelihood.
+def plot_three_shapes(logli, shapes=None, norm_const=1, fignum=15,
+                      normalize_together=False):
+    """ Plots the dictionary from the three_shapes() method; creates a plot 
+    with the shapes of the goals, whose alpha (transparency) is given by 
+    their likelihood.
 
     Parameters
     ----------
@@ -1185,9 +1187,9 @@ def plot_three_shapes(logli, shapes=None, norm_const=1, fignum=15, normalize_tog
         Which shapes are contained in the data. If not provided, it is inferred
         from the data itself.
     norm_const, int
-        Controls the maximum alpha that any given lnC can have. The idea is that for
-        logli data that spans many subjects, this number is set to the number of
-        subjects or something like that.
+        Controls the maximum alpha that any given lnC can have. The idea is 
+        that for logli data that spans many subjects, this number is set to 
+        the number of subjects or something like that.
 
 
     """
@@ -1548,7 +1550,6 @@ def likelihood_data(shape_pars, thres_ix=0, subject=0, data_flat=None,
     """ Gets experimental data and calculates the likelihood for the actinf
     model given by shape_pars.
     """
-    import betClass as bc
     import import_data as imda
     import numpy as np
 
@@ -2945,28 +2946,37 @@ def model_selection_shape_families():
 
 
 def model_selection_clustering(subjects):
-    """Finds the best set of 'means' for the clustering, using the following rules for simplification:
-    (1) There are at most three clusters. (2) 
+    """Finds the best set of 'means' for the clustering, using the k-medoids
+    algorithm.
     """
-    pass
+    import clustering as cl
+    likelihoods = likelihood_map_exponential(subjects)
+
+    data_dists = []
+    for subject in subjects:
+        data_dists.append(likelihoods[subject])
+    data_dists = np.array(data_dists)
+
+    return cl.k_medoids_KL(data_dists, 2, 10)
 
 
 def cluster_exponential(subjects=None, shape_pars_list=None):
-    """ Separates subjects into the categories given in the --shape_pars_list-- and returns significance
-    levels for the separation.
+    """ Separates subjects into the categories given in the --shape_pars_list--
+    and returns significance levels for the separation.
 
     Parameters
     ----------
     shape_pars_list: list
-        Each element of the list should be a --shape_pars-- in the form [shape, par1, par2, ...]. Each one
-        of them is taken to be a cluster around which subjects should be clasified. Defaults to those used in
+        Each element of the list should be a --shape_pars-- in the form
+        [shape, par1, par2, ...]. Each one of them is taken to be a cluster
+        around which subjects should be clasified. Defaults to those used in
         the paper.
 
     Returns
     -------
     clustering: dictionary
-        One entry for each subject. Each element has the BIC differences for each one of the --shape_pars-- in
-        --shape_pars_list--.
+        One entry for each subject. Each element has the BIC differences for
+        each one of the --shape_pars-- in --shape_pars_list--.
     """
     if subjects is None:
         subjects = range(35)
