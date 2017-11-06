@@ -105,7 +105,7 @@ class Actinf(object):
     def posteriorOverStates(self, Observation, CurrentTime, Policies,
                             PosteriorLastState, PastAction,
                             PriorPrecision, newB = None, PreUpd = False,
-                            return_Qs = False):
+                            calc_Qs = False):
         """
         Decision model for Active Inference. Takes as input the model
         parameters in MDP, as well as an observation and the prior over the
@@ -127,7 +127,7 @@ class Actinf(object):
         PreUpd: bool
             Whether to return the Precision or the precision updates (of which
             the last equals the Precision).
-        return_Qs: bool
+        calc_Qs: bool
             Whether to return the valuation of all the action sequences in
             Policies.
 
@@ -149,7 +149,7 @@ class Actinf(object):
             returned instead of W.
         Q: np.array, shape=(nV)
             Valuation of the different action sequences given in Policies. This
-            is only returned if return_Qs is True.
+            is only returned if calc_Qs is True.
         """
 #        print PriorPrecision, self.gamma
         V = Policies
@@ -231,7 +231,7 @@ class Actinf(object):
         else:
             list_return.append(W)
 
-        if return_Qs is True:
+        if calc_Qs is True:
             list_return.append(Q)
 
         return list_return

@@ -2878,8 +2878,9 @@ def plot_likelimap_exponential(subjects, fignum=22):
 
     for ix_sub, subject in enumerate(subjects):
         maax = plt.subplot(s1, s2, ix_sub + 1)
-        maax.imshow(likelihoods[subject], interpolation='none')
-        plt.set_cmap('gray_r')
+        maax.imshow(
+            (likelihoods[subject] / likelihoods[subject].max())**6, interpolation='none')
+        # plt.set_cmap('gray_r')
         maax.set_xticks(kappa_ticks)
         maax.set_xticklabels(kappa_ticklabels, fontsize=8)
         # maax.set_xticklabels(all_pars[1])
@@ -2890,6 +2891,36 @@ def plot_likelimap_exponential(subjects, fignum=22):
         maax.set_xlabel(r'$\kappa$')
     plt.tight_layout()
     plt.show(block=False)
+
+
+def plot_project_likelimap_exponential(subjects=None, fignum=23):
+    """Takes the likelihood map of kappa-alpha and projects onto kappa by adding all alphas."""
+    if subjects is None:
+        subjects = range(35)
+
+    s1, s2 = calc_subplots(len(subjects))
+    fig = plt.figure(fignum)
+
+    likelihoods = likelihood_map_exponential(subjects)
+    for ix_subj, subject in enumerate(subjects):
+        likelihood_flat = likelihoods[subject].sum(axis=0)
+        maax = plt.subplot(s1, s2, ix_subj + 1)
+        maax.plot(likelihood_flat)
+
+
+def get_max_projected_exponential(subjects=None):
+    """Projects the likelihood map of kappa-alpha into just kappa. Returns the maximum."""
+    if subjects is None:
+        subjects = range(35)
+
+    kappas = invp.__rds__('exponential')[1]
+
+    likelihoods = likelihood_map_exponential(subjects)
+    max_likelihood = {}
+    for subject in subjects:
+        flat_likeli = likelihoods[subject].sum(axis=0)
+        max_likelihood[subject] = kappas[flat_likeli.argmax()]
+    return max_likelihood
 
 
 def model_selection_shape_families():
@@ -2911,6 +2942,38 @@ def model_selection_shape_families():
         bic[shape] = 35 * k_shape[shape] * num_data_points - 2 * logli
 
     return bic
+
+
+def model_selection_clustering(subjects):
+    """Finds the best set of 'means' for the clustering, using the following rules for simplification:
+    (1) There are at most three clusters. (2) 
+    """
+    pass
+
+
+def cluster_exponential(subjects=None, shape_pars_list=None):
+    """ Separates subjects into the categories given in the --shape_pars_list-- and returns significance
+    levels for the separation.
+
+    Parameters
+    ----------
+    shape_pars_list: list
+        Each element of the list should be a --shape_pars-- in the form [shape, par1, par2, ...]. Each one
+        of them is taken to be a cluster around which subjects should be clasified. Defaults to those used in
+        the paper.
+
+    Returns
+    -------
+    clustering: dictionary
+        One entry for each subject. Each element has the BIC differences for each one of the --shape_pars-- in
+        --shape_pars_list--.
+    """
+    if subjects is None:
+        subjects = range(35)
+    if shape_pars_list is None:
+        shape_pars_list = [['exponential', 5], ['exponential', 99]]
+
+    clustering = {}
 
 
 def rp_vs_risky_by_shape(subjects, shape_pars, alpha=1):

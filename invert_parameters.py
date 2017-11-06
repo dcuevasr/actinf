@@ -123,7 +123,7 @@ def preprocess_data(data_flat):
 
 
 def infer_parameters(data_flat=None, as_seen=None, no_calc=True,
-                     normalize=False, shape_pars=None, return_Qs=False):
+                     normalize=False, shape_pars=None, calc_Qs=False, return_Qs=False):
     r""" Calculates the likelihood for every model provided.
 
     Each model is created with different values of the mean and sd of a
@@ -191,9 +191,13 @@ def infer_parameters(data_flat=None, as_seen=None, no_calc=True,
                 np.unique(data['threshold']).
     normalize: bool
         Determines whether the likelihoods should be 'marginalized'.
-    return_Qs: bool
+    calc_Qs: bool
         Whether or not to get the valuation over all action sequences from
         the active inference class. #TODO: make compatible with as_seen.
+    return_Qs: bool
+        Whether the calculated Qs are to be returned to the calling function. If not,
+        they are just saved to file. Note that setting return_Qs to True will force
+        calc_Qs to be True too.
 
     Returns
     -------
@@ -206,6 +210,8 @@ def infer_parameters(data_flat=None, as_seen=None, no_calc=True,
     mu_sigma: np.array([nMu, nSd, 2]), dtype = int
         Values of Mu and Sigma used to build the models.
     """
+    if return_Qs:
+        calc_Qs = True
 
     print('Running...')
     flag_write_posta = False
@@ -260,7 +266,7 @@ def infer_parameters(data_flat=None, as_seen=None, no_calc=True,
 
     par = tuple(range(num_pars))
     posta_inferred = {}
-    if return_Qs:
+    if calc_Qs:
         Qs = {}
     else:
         Qs = None
@@ -292,9 +298,9 @@ def infer_parameters(data_flat=None, as_seen=None, no_calc=True,
                                                            trial[s], le_V[trial[s]],
                                                            mabed[thres[s]
                                                                  ].D, 0, 15,
-                                                           return_Qs=return_Qs)
+                                                           calc_Qs=calc_Qs)
             posta_inferred[index] = post_all[1:3]
-            if return_Qs:
+            if calc_Qs:
                 Qs[index] = post_all[2:]
     print('Took %d seconds.' % (time() - tini))
 
@@ -306,8 +312,8 @@ def infer_parameters(data_flat=None, as_seen=None, no_calc=True,
     # out_posteriors = simulate_posteriors(as_seen, shape_pars,
     #                                      state, trial, thres,
     #                                      arr_lnc, mabed, flag_write_posta,
-    #                                      mu_sigma, return_Qs=return_Qs)
-    # if return_Qs is not True:
+    #                                      mu_sigma, calc_Qs=calc_Qs)
+    # if calc_Qs is not True:
     #     posta_inferred = out_posteriors
     #     Qs = None
     # else:
@@ -333,17 +339,20 @@ def infer_parameters(data_flat=None, as_seen=None, no_calc=True,
     print('The whole thing took: %d seconds.' % (time() - t_ini))
     smiley = np.random.choice([':)', 'XD', ':P', '8D'])
     print('Finished. Have a nice day %s\n' % smiley)
-    return likelihood_model, post_act, deci, trial, state, mu_sigma
+    if return_Qs:
+        return likelihood_model, post_act, deci, trial, state, mu_sigma, Qs
+    else:
+        return likelihood_model, post_act, deci, trial, state, mu_sigma
 
 
 def simulate_posteriors(as_seen, shape_pars, state, trial, thres, arr_lnc,
-                        mabed, wflag, mu_sigma, return_Qs=False):
+                        mabed, wflag, mu_sigma, calc_Qs=False):
     """ Simulates the posteriors for all observations."""
     posta_inferred = {}
-    Qs = {}  # used only if return_Qs is True
-    if return_Qs is True and as_seen != {}:
+    Qs = {}  # used only if calc_Qs is True
+    if calc_Qs is True and as_seen != {}:
         raise NotImplementedError(
-            """ Using return_Qs and a nonempty as_seen is
+            """ Using calc_Qs and a nonempty as_seen is
           not yet implemented: the observations in
           as_seen have not been modified to include the
           potential of having the Qs too.""")
@@ -403,11 +412,11 @@ def simulate_posteriors(as_seen, shape_pars, state, trial, thres, arr_lnc,
                                                            trial[s], le_V[trial[s]],
                                                            mabed[thres[s]
                                                                  ].D, 0, 15,
-                                                           return_Qs=return_Qs)
+                                                           calc_Qs=calc_Qs)
             posta_inferred[index] = post_all[1:3]
-            if return_Qs is True:
+            if calc_Qs is True:
                 Qs[index] = post_all[2:]
-    if return_Qs is True:
+    if calc_Qs is True:
         return posta_inferred, Qs
     else:
         return posta_inferred
@@ -1195,7 +1204,7 @@ def maximum_likelihood_all_data(subjects):
 def main(data_type, shape_pars, subject=0, data_flat=None,
          threshold=None, games=20, trials=None, sim_shape_pars=None,
          as_seen=None, return_results=True, normalize=False,
-         return_Qs=False, alpha=None, no_calc=False):
+         calc_Qs=False, alpha=None, no_calc=False):
     r""" main(data_type, subject, mu_range, sd_range [, games] [, trials]
               [, return_results])
 
@@ -1239,7 +1248,7 @@ def main(data_type, shape_pars, subject=0, data_flat=None,
     sim_shape_pars: list
         With data_type = simulated, use these parameters to create the model
         to simulate the data. Its format is identical to shape_pars (see above).
-    return_Qs: bool
+    calc_Qs: bool
         Whether or not to save the valuation over action sequences.
 
     Returns
@@ -1320,7 +1329,7 @@ def main(data_type, shape_pars, subject=0, data_flat=None,
             infer_parameters(shape_pars=shape_pars,
                              data_flat=data_flat[s],
                              as_seen=as_seen, normalize=normalize,
-                             return_Qs=return_Qs, no_calc=no_calc))
+                             calc_Qs=calc_Qs, no_calc=no_calc))
     if return_results is True:
         return post_model, posta, deci, trial, state, mu_sigma, data_flat
 
@@ -1390,4 +1399,4 @@ if __name__ == '__main__':
     sys.stdout.flush()
     main(data_type=['full', 'pruned'], shape_pars=shape_pars,
          subject=args.subjects,
-         trials=trials, return_results=False, return_Qs=True)
+         trials=trials, return_results=False, calc_Qs=True)
