@@ -16,9 +16,11 @@ import os
 import numpy as np
 from scipy import io
 
+
 class cd:
     """ Context thingy for temporarily changing working folder.
     """
+
     def __init__(self, newPath, force=False):
         self.newPath = newPath
         self.force = force
@@ -35,7 +37,7 @@ class cd:
         os.chdir(self.oldPath)
 
 
-def import_kolling_data(path_to_data = None):
+def import_kolling_data(path_to_data=None):
     """ Reads the data for the Kolling experiment as saved by Sven Breitmeyer.
     """
     if path_to_data is None:
@@ -51,11 +53,12 @@ def import_kolling_data(path_to_data = None):
         raise RuntimeError('No .mat files in the specified folder.')
     return data
 
+
 def clean_data(data):
     """ Cleans the mess that importing the data from matlab causes and prunes
     unnecessary fields from the data.
     """
-    nZ = len(data) #number of participants
+    nZ = len(data)  # number of participants
     data_clean = [data[z]['block'][0] for z in range(nZ)]
     data_out = []
     for dd, datin in enumerate(data_clean):
@@ -69,27 +72,29 @@ def clean_data(data):
 
     return data_out
 
+
 def enhance_data(data):
     """ Transforms the fields of the data (already cleaned in clean_data) into
     something usable for the python algorithms and stuff.
 
     Works in-place.
     """
-    nZ = len(data) #number of participants
+    nZ = len(data)  # number of participants
     nD, nT = data[0]['response'].shape
-    target=np.array([595,930,1035,1105])  # From Sven's code
+    target = np.array([595, 930, 1035, 1105])  # From Sven's code
 
     for z in range(nZ):
-        #calculate actual response
-        data[z]['choice'] = np.logical_xor(data[z]['response'],
-                                           data[z]['rechts'])*1
-        #add trial number
-        data[z]['trial'] = np.tile(np.arange(nT), (nD,1)).astype(int)
-        data[z]['threshold'] = target[data[z]['target']-1].astype(int)
+        # calculate actual response
+        data[z]['choice'] = data[z]['response']
+        # np.logical_xor(data[z]['response'], data[z]['rechts'])*1
+        # add trial number
+        data[z]['trial'] = np.tile(np.arange(nT), (nD, 1)).astype(int)
+        data[z]['threshold'] = target[data[z]['target'] - 1].astype(int)
         data[z]['obs'] = np.cumsum(data[z]['points'], axis=1).astype(int)
         data[z]['TargetLevels'] = target
         data[z]['NumberGames'] = nD
         data[z]['NumberTrials'] = nT
+
 
 def flatten_data(data):
     R""" Flatten all relevant fields into one long string of 'independent'
@@ -106,8 +111,10 @@ def flatten_data(data):
         data_flat[-1]['filename'] = data[z]['filename']
         for name in ['choice', 'obs', 'trial', 'reihe']:
             data_flat[-1][name] = np.ndarray.flatten(data[z][name])
-        data_flat[-1]['threshold'] = np.ndarray.flatten(np.tile(data[z]['threshold'], (nT,1)), order='F')
+        data_flat[-1]['threshold'] = np.ndarray.flatten(
+            np.tile(data[z]['threshold'], (nT, 1)), order='F')
     return data_flat
+
 
 def add_initial_obs(data_flat):
     R""" Adds the initial observation to the data. To do this, it removes the
@@ -120,13 +127,14 @@ def add_initial_obs(data_flat):
     nD = data_flat[0]['NumberGames']
     nT = data_flat[0]['NumberTrials']
     for n in range(len(data_flat)):
-        data_flat[n]['obs'] = np.reshape(np.hstack([np.zeros((nD,1)),
-                              np.reshape(data_flat[n]['obs'], (-1, nT))[:,:-1]]), (-1))
+        data_flat[n]['obs'] = np.reshape(np.hstack([np.zeros((nD, 1)),
+                                                    np.reshape(data_flat[n]['obs'], (-1, nT))[:, :-1]]), (-1))
 #        for name in ['reihe', 'threshold', 'choice', 'trial']:
 #            data_flat[n][name] = np.reshape(np.hstack([np.reshape(data_flat[n][name],
 #                                  (-1,nT)), np.zeros((nD,1), dtype=int)]), (-1))
 
-def small_data(data, nGames = 2):
+
+def small_data(data, nGames=2):
     R"""Remove most observations from the data for test runs.
 
     For every subject in data, only the first nGames games are kept (that is,
@@ -135,10 +143,10 @@ def small_data(data, nGames = 2):
     """
     import copy
     nT = data[0]['NumberTrials']
-    nObs = nT*nGames
+    nObs = nT * nGames
     data_out = copy.deepcopy(data)
     for z in range(len(data_out)):
-        for name in ['obs','threshold','reihe','choice','trial']:
+        for name in ['obs', 'threshold', 'reihe', 'choice', 'trial']:
             data_out[z][name] = data_out[z][name][:nObs]
             data_out[z]['NumberGames'] = nGames
 #    data_out['threshold'] = data_out['threshold'][nObs]
@@ -146,6 +154,7 @@ def small_data(data, nGames = 2):
 #    data_out['choice'] = data_out['choice'][nObs]
 #    data_out['trial'] = data_out['trial'][nObs]
     return data_out
+
 
 def test_past_threshold(data):
     r""" Obtains distributions over points obtained by all subjects, separated
@@ -166,20 +175,20 @@ def test_past_threshold(data):
     for z in range(nZ):
         flag = 0
         k = 0
-        while flag==0:
+        while flag == 0:
             try:
-                dist[data[z]['threshold'][k]].append(data[z]['obs'][k,-1])
+                dist[data[z]['threshold'][k]].append(data[z]['obs'][k, -1])
                 k += 1
             except:
                 flag = 1
 
     for nt in range(nThres):
-        dist[threses[nt]] = np.reshape(np.array(dist[threses[nt]]),(-1))
-
+        dist[threses[nt]] = np.reshape(np.array(dist[threses[nt]]), (-1))
 
     return dist
 
-def plot_past_threshold(dist, fignum = None, ax = None, threshold = None):
+
+def plot_past_threshold(dist, fignum=None, ax=None, threshold=None):
     r""" Plots histograms of the output of test_past_threshold().
 
     Parameters
@@ -206,7 +215,6 @@ def plot_past_threshold(dist, fignum = None, ax = None, threshold = None):
             fig.clf()
         ax = fig.gca()
 
-
     if threshold is None:
         threshold = range(len(dist))
         s1, s2 = utils.calc_subplots(len(dist))
@@ -214,16 +222,17 @@ def plot_past_threshold(dist, fignum = None, ax = None, threshold = None):
         s1, s2 = 1, 1
     else:
         s1, s2 = utils.calc_subplots(len(threshold))
-        assert len(threshold) <= len(dist), ('More thresholds provided than'+
-                                              'the data has.')
+        assert len(threshold) <= len(dist), ('More thresholds provided than' +
+                                             'the data has.')
     keys = list(dist.keys())
     keys = [keys[t] for t in threshold]
 
-    for k,key in enumerate(keys):
-        ax = plt.subplot(s1,s2,k+1)
+    for k, key in enumerate(keys):
+        ax = plt.subplot(s1, s2, k + 1)
         ax.hist(dist[key])
         ax.set_title('Threshold: %d' % key)
         ax.axvline(key, linewidth=3, color='r')
+
 
 def cap_states(data_flat):
     r""" Caps the number of states as 1.2 times the threshold.
@@ -233,14 +242,16 @@ def cap_states(data_flat):
     target_levels = data_flat[0]['TargetLevels']
     max_state = {}
     for tlvl in target_levels:
-        max_state[tlvl] = int(1.2*tlvl)
+        max_state[tlvl] = int(1.2 * tlvl)
     nts = data_flat[0]['obs'].size
     for da in range(len(data_flat)):
         for s in range(nts):
-            if data_flat[da]['threshold'][s]==0:
+            if data_flat[da]['threshold'][s] == 0:
                 continue
             data_flat[da]['obs'][s] = min(data_flat[da]['obs'][s],
-                                      max_state[data_flat[da]['threshold'][s]])
+                                          max_state[data_flat[da]['threshold'][s]])
+
+
 def prune_trials(data_flat, trials):
     r""" Will remove from the data the trials not in 'trials'. The idea is
     to remove the earlier trials, which contain (presumably) less information
@@ -251,12 +262,14 @@ def prune_trials(data_flat, trials):
     for d, datum in enumerate(data_flat):
         indices = np.zeros(datum['trial'].size, dtype=bool)
         for t in trials:
-            indices = indices + np.array(datum['trial']==t)
-        for name in ['obs', 'threshold', 'reihe','choice','trial']:
+            indices = indices + np.array(datum['trial'] == t)
+        for name in ['obs', 'threshold', 'reihe', 'choice', 'trial']:
             data_out[d][name] = datum[name][indices]
 
     return data_out
-def main(path_to_data = None):
+
+
+def main(path_to_data=None):
     data = import_kolling_data(path_to_data)
     data = clean_data(data)
     enhance_data(data)
@@ -264,11 +277,12 @@ def main(path_to_data = None):
     add_initial_obs(data_flat)
     return data, data_flat
 
+
 if __name__ == "__main__":
     data, data_flat = main()
     small = small_data(data_flat, 10)
-    small_prune = prune_trials(small, [0,1,2])
-    prune = prune_trials(data_flat, [0,1,2])
+    small_prune = prune_trials(small, [0, 1, 2])
+    prune = prune_trials(data_flat, [0, 1, 2])
 
 # def testing_inference_simulated(force_data = False):
 #     """ Little scripts for generating simulated behavioral data and performing

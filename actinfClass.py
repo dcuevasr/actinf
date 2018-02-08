@@ -40,10 +40,16 @@ import numpy as np
 import scipy as sp
 import utils
 
-np.seterr(divide = 'ignore')
+np.seterr(divide='ignore')
+
 
 class Actinf(object):
-    def __init__(self,MDP):
+    """Implements all methods necessary for active inference, and some
+    additional plotting methods that might be useful. It needs to be
+    initialized with a child class. For an example, see betClass.py.
+    """
+
+    def __init__(self, MDP):
         self.A = MDP.A
         self.B = MDP.B
         self.C = MDP.C
@@ -52,7 +58,8 @@ class Actinf(object):
         self.V = MDP.V
 
         self.importMDP()
-    def importMDP(self, SmallestProbability = True):
+
+    def importMDP(self, SmallestProbability=True):
         """ Adds a smallest probability of exp(-16) to all the matrices, to
         avoid real infinitums. It also defines lnA, lnC, lnD and H.
 
@@ -68,44 +75,43 @@ class Actinf(object):
         self.N = 4
         self.T = np.shape(self.V)[1]
 
-        self.Ns = np.shape(self.B)[1] # Number of hidden states
-        self.Nu = np.shape(self.B)[0] # Number of actions
+        self.Ns = np.shape(self.B)[1]  # Number of hidden states
+        self.Nu = np.shape(self.B)[0]  # Number of actions
         self.Np = np.shape(self.V)[0]
         self.No = np.shape(self.A)[0]
 
         # If the matrices A, B, C or D have any zero components, add noise and
         # normalize again.
         if SmallestProbability is True:
-            p0 = np.exp(-160.0) # Smallest probability
+            p0 = np.exp(-160.0)  # Smallest probability
         else:
             p0 = 0
         #self.A += (np.min(self.A)==0)*p0
-        self.A = sp.dot(self.A,np.diag(1/np.sum(self.A,0)))
+        self.A = sp.dot(self.A, np.diag(1 / np.sum(self.A, 0)))
 
-        self.B += (np.min(self.B)==0)*p0
+        self.B += (np.min(self.B) == 0) * p0
         for b in range(np.shape(self.B)[0]):
-            self.B[b] = self.B[b]/np.sum(self.B[b],axis=0)
+            self.B[b] = self.B[b] / np.sum(self.B[b], axis=0)
 
-        self.C += (np.min(self.C)==0)*p0
-        self.C = self.C/self.C.sum(axis=0)
+        self.C += (np.min(self.C) == 0) * p0
+        self.C = self.C / self.C.sum(axis=0)
 
-        self.D += (np.min(self.D)==0)*p0
-        self.D = self.D/np.sum(self.D)
-
+        self.D += (np.min(self.D) == 0) * p0
+        self.D = self.D / np.sum(self.D)
 
         self.lnA = sp.log(self.A)
         self.lnC = np.log(self.C)
         self.lnD = np.log(self.D)
 
         if SmallestProbability is True:
-            self.H = np.sum(self.A*np.nan_to_num(self.lnA),0)
+            self.H = np.sum(self.A * np.nan_to_num(self.lnA), 0)
         else:
             self.H = np.zeros(self.Ns)
 
     def posteriorOverStates(self, Observation, CurrentTime, Policies,
                             PosteriorLastState, PastAction,
-                            PriorPrecision, newB = None, PreUpd = False,
-                            calc_Qs = False):
+                            PriorPrecision, newB=None, PreUpd=False,
+                            calc_Qs=False):
         """
         Decision model for Active Inference. Takes as input the model
         parameters in MDP, as well as an observation and the prior over the
@@ -155,8 +161,6 @@ class Actinf(object):
         V = Policies
         cNp = np.shape(V)[0]
 
-
-
         w = np.array(range(cNp))
         x = PosteriorLastState
         W = PriorPrecision
@@ -166,7 +170,6 @@ class Actinf(object):
         u = np.zeros(cNp)
         P = np.zeros(self.Nu)
 
-
         # V can be given as the action sequences starting at trial t, instead
         # of the full array (starting at trial 0). This is done to avoid doing
         # extra calculations on ''repeated'' entries on V, when observations
@@ -175,8 +178,8 @@ class Actinf(object):
         # to make it consistent with everything else. These values will not be
         # used for any calculations:
         if V.shape[1] != T:
-            V = np.hstack([-np.ones((V.shape[0],T - V.shape[1]), dtype=int), V])
-
+            V = np.hstack(
+                [-np.ones((V.shape[0], T - V.shape[1]), dtype=int), V])
 
         # A 'false' set of transition matrices can be fed to the Agent,
         # depending on the newB input above. No input means that the ones from
@@ -185,23 +188,23 @@ class Actinf(object):
             B = self.B
         else:
             if np.shape(newB) != np.shape(self.B):
-                raise ValueError('The provided transition matrices'+
-                                ' do not have the correct size')
+                raise ValueError('The provided transition matrices' +
+                                 ' do not have the correct size')
             B = newB
 
-        if t==0:
-            v = self.lnA[Observation,:] + self.lnD
+        if t == 0:
+            v = self.lnA[Observation, :] + self.lnD
         else:
-            v = self.lnA[Observation,:] + sp.log(sp.dot(B[a],x))
+            v = self.lnA[Observation, :] + sp.log(sp.dot(B[a], x))
         x = utils.softmax(v)
 
         Q = np.zeros(cNp)
 
         for k in range(cNp):
             xt = x
-            for j in range(t,T):
+            for j in range(t, T):
                 # transition probability from current state
-                xt = sp.dot(B[V[k, j],:,:], xt)
+                xt = sp.dot(B[V[k, j], :, :], xt)
 #                raise Exception('stooooop')
                 ot = sp.dot(self.A, xt)
                 # Predicted Divergence
@@ -212,17 +215,18 @@ class Actinf(object):
         # Variational updates: calculate the distribution over actions, then
         # the precision, and iterate N times.
         precisionUpdates = []
-        b = self.alpha/W
+        b = self.alpha / W
         for i in range(self.N):
             # policy (u)
-            u[w] = utils.softmax(W*Q)
+            u[w] = utils.softmax(W * Q)
             # precision (W)
-            b = self.lambd*b + (1 - self.lambd)*(self.beta - sp.dot(u[w],Q))
-            W = self.alpha/b
+            b = self.lambd * b + (1 - self.lambd) * \
+                (self.beta - sp.dot(u[w], Q))
+            W = self.alpha / b
             precisionUpdates.append(W)
         # Calculate the posterior over policies and over actions.
         for j in range(self.Nu):
-            P[j] = np.sum(u[w[utils.ismember(V[:,t],j)]])
+            P[j] = np.sum(u[w[utils.ismember(V[:, t], j)]])
 
         list_return = [x, P]
 
@@ -236,7 +240,11 @@ class Actinf(object):
 
         return list_return
 
-    def sampleNextState(self,CurrentState, PosteriorAction):
+    def sampleNextState(self, *args, **kwargs):
+        """Calls sample_next_state()."""
+        return self.sample_next_state(*args, **kwargs)
+
+    def sample_next_state(self, CurrentState, PosteriorAction):
         """
         Samples the next action and next state based on the Posteriors
         """
@@ -244,9 +252,14 @@ class Actinf(object):
         P = PosteriorAction
         NextAction = np.nonzero(np.random.rand(1) < np.cumsum(P))[0][0]
         NextState = np.nonzero(np.random.rand(1) <
-                    np.cumsum(self.B[NextAction,:,s.astype(int)]))[0][0]
+                               np.cumsum(self.B[NextAction, :, s.astype(int)]))[0][0]
         return NextAction, NextState
-    def sampleNextObservation(self,CurrentState):
+
+    def sampleNextObservation(self, *args, **kwargs):
+        """Calls sample_next_obs()."""
+        return self.sample_next_obs(*args, **kwargs)
+
+    def sample_next_obs(self, CurrentState):
         """
         Samples the next observation given the current state.
 
@@ -256,9 +269,14 @@ class Actinf(object):
         if np.size(CurrentState) != 1:
             CurrentState = np.nonzero(CurrentState)[0][0]
         Observation = np.nonzero(np.random.rand(1) <
-                        np.cumsum(self.A[:,CurrentState]))[0][0]
+                                 np.cumsum(self.A[:, CurrentState]))[0][0]
         return Observation
-    def exampleFull(self, printTime = False, PreUpd = False):
+
+    def exampleFull(self, *args, **kwargs):
+        """Calls example_full(), for compatibility with older code."""
+        return self.example_full(*args, **kwargs)
+
+    def example_full(self, printTime=False, PreUpd=False):
         """ This is a use example for the Active Inference class. It performs
         inference for all trials in one go.
 
@@ -275,59 +293,59 @@ class Actinf(object):
         t1 = time()
         # Check that the class has been fully initiated with a task:
         if hasattr(self, 'lnA') is False:
-            raise Exception('NotInitiated: The class has not been initiated'+
+            raise Exception('NotInitiated: The class has not been initiated' +
                             ' with a task')
         T = self.V.shape[1]
         wV = self.V   # Working set of policies. This will change after choice
         obs = np.zeros(T, dtype=int)    # Observations at time t
         act = np.zeros(T, dtype=int)    # Actions at time t
         sta = np.zeros(T, dtype=int)    # Real states at time t
-        bel = np.zeros((T,self.Ns))      # Inferred states at time t
-        P   = np.zeros((T, self.Nu))
-        W   = np.zeros(T)
+        bel = np.zeros((T, self.Ns))      # Inferred states at time t
+        P = np.zeros((T, self.Nu))
+        W = np.zeros(T)
         # Matrices for diagnostic purposes. If deleted, also deleted the
         # corresponding ones in posteriorOverStates:
         self.oQ = []
         self.oV = []
         self.oH = []
 
-        sta[0] = np.where(self.S>0.1)[0][0]
+        sta[0] = np.where(self.S > 0.1)[0][0]
         # Some dummy initial values:
         PosteriorLastState = self.D
         PastAction = 1
         PriorPrecision = self.gamma
         Pupd = []
-        for t in range(T-1):
+        for t in range(T - 1):
             # Sample an observation from current state
             obs[t] = self.sampleNextObservation(sta[t])
             # Update beliefs over current state and posterior over actions
             # and precision
-            bel[t,:], P[t,:], Gamma = self.posteriorOverStates(obs[t], t, wV,
-                                                    PosteriorLastState,
-                                                    PastAction,
-                                                    PriorPrecision,
-                                                    PreUpd = PreUpd)
+            bel[t, :], P[t, :], Gamma = self.posteriorOverStates(obs[t], t, wV,
+                                                                 PosteriorLastState,
+                                                                 PastAction,
+                                                                 PriorPrecision,
+                                                                 PreUpd=PreUpd)
             if PreUpd is True:
                 W[t] = Gamma[-1]
                 Pupd.append(Gamma)
             else:
                 W[t] = Gamma
             # Sample an action and the next state using posteriors
-            act[t], sta[t+1] = self.sampleNextState( sta[t], P[t,:])
+            act[t], sta[t + 1] = self.sampleNextState(sta[t], P[t, :])
             # Remove from pool all policies that don't have the selected action
             tempV = []
             for seq in wV:
                 if seq[t] == act[t]:
                     tempV.append(seq)
-            wV = np.array(tempV, dtype = int)
+            wV = np.array(tempV, dtype=int)
             # Prepare inputs for next iteration
             PosteriorLastState = bel[t]
             PastAction = act[t]
             PriorPrecision = W[t]
         xt = time() - t1
-        self.Example = {'Obs':obs, 'RealStates':sta, 'InfStates':bel,
-                        'Precision':W, 'PostActions':P, 'Actions':act,
-                        'xt':xt}
+        self.Example = {'Obs': obs, 'RealStates': sta, 'InfStates': bel,
+                        'Precision': W, 'PostActions': P, 'Actions': act,
+                        'xt': xt}
         if PreUpd is True:
             self.Example['PrecisionUpdates'] = np.array(Pupd)
         if printTime is True:
@@ -336,8 +354,8 @@ class Actinf(object):
 
 #        print 'See the Example dictionary for the results\n'
 
-    def full_inference(self, obs_f = None, act_f = None, V_f = None,
-                       sta_f = None, preupd = False, just_return = False):
+    def full_inference(self, obs_f=None, act_f=None, V_f=None,
+                       sta_f=None, preupd=False, just_return=False):
         """ Performs active inference over all trials for one game, as defined
         in the particular sub-class in use (e.g. betClass).
 
@@ -392,7 +410,7 @@ class Actinf(object):
         t1 = time()
         # Check that the class has been fully initiated with a task:
         if hasattr(self, 'lnA') is False:
-            raise Exception('NotInitiated: The class has not been initiated'+
+            raise Exception('NotInitiated: The class has not been initiated' +
                             ' with a task')
         if V_f is not None:
             wV = V_f
@@ -416,32 +434,32 @@ class Actinf(object):
         else:
             sta = sta_f
 
-        bel = np.zeros((T,self.Ns))      # Inferred states at time t
-        P   = np.zeros((T, self.Nu))
-        W   = np.zeros(T)
+        bel = np.zeros((T, self.Ns))      # Inferred states at time t
+        P = np.zeros((T, self.Nu))
+        W = np.zeros(T)
         # Matrices for diagnostic purposes. If deleted, also deleted the
         # corresponding ones in posteriorOverStates:
         self.oQ = []
         self.oV = []
         self.oH = []
         if sta_f is None:
-            sta[0] = np.where(self.S>0.1)[0][0]
+            sta[0] = np.where(self.S > 0.1)[0][0]
         # Some dummy initial values:
         PosteriorLastState = self.D
         PastAction = 1
         PriorPrecision = self.gamma
         Pupd = []
-        for t in range(T-1):
+        for t in range(T - 1):
             # Sample an observation from current state
             if obs_f is None:
                 obs[t] = self.sampleNextObservation(sta[t])
             # Update beliefs over current state and posterior over actions
             # and precision
-            bel[t,:], P[t,:], Gamma = self.posteriorOverStates(obs[t], t, wV,
-                                                    PosteriorLastState,
-                                                    PastAction,
-                                                    PriorPrecision,
-                                                    PreUpd = preupd)
+            bel[t, :], P[t, :], Gamma = self.posteriorOverStates(obs[t], t, wV,
+                                                                 PosteriorLastState,
+                                                                 PastAction,
+                                                                 PriorPrecision,
+                                                                 PreUpd=preupd)
             if preupd is True:
                 W[t] = Gamma[-1]
                 Pupd.append(Gamma)
@@ -449,31 +467,31 @@ class Actinf(object):
                 W[t] = Gamma
             # Sample an action and the next state using posteriors
             if act_f is None:
-                cpost_act = P[t,:]
+                cpost_act = P[t, :]
             else:
                 cpost_act = np.zeros(self.nU)
                 cpost_act[act_f[t]] = 1
 
-            act_tmp, sta_tmp = self.sampleNextState( sta[t], cpost_act)
+            act_tmp, sta_tmp = self.sampleNextState(sta[t], cpost_act)
 
             if act_f is None:
                 act[t] = act_tmp
             if sta_f is None:
-                sta[t+1] = sta_tmp
+                sta[t + 1] = sta_tmp
             # Remove from pool all policies that don't have the selected action
             tempV = []
             for seq in wV:
                 if seq[t] == act[t]:
                     tempV.append(seq)
-            wV = np.array(tempV, dtype = int)
+            wV = np.array(tempV, dtype=int)
             # Prepare inputs for next iteration
             PosteriorLastState = bel[t]
             PastAction = act[t]
             PriorPrecision = W[t]
         xt = time() - t1
-        Example = {'Obs':obs, 'RealStates':sta, 'InfStates':bel,
-                            'Precision':W, 'PostActions':P, 'Actions':act,
-                            'xt':xt}
+        Example = {'Obs': obs, 'RealStates': sta, 'InfStates': bel,
+                   'Precision': W, 'PostActions': P, 'Actions': act,
+                   'xt': xt}
         if preupd is True:
             Example['PrecisionUpdates'] = np.array(Pupd)
         if just_return is True:
@@ -481,9 +499,8 @@ class Actinf(object):
         else:
             self.Example = Example
 
-
-    def plot_action_posteriors(self, posterior_over_actions = None,
-                               fignum = None, ax = None):
+    def plot_action_posteriors(self, posterior_over_actions=None,
+                               fignum=None, ax=None):
         """ Stacked bar plot of the posteriors over actions at each trial.
 
         If the posteriors are provided in the input, those are plotted.
@@ -495,7 +512,6 @@ class Actinf(object):
             postA = posterior_over_actions
         else:
             postA = self.Example['PostActions']
-
 
         nT, nU = postA.shape
 
@@ -509,17 +525,17 @@ class Actinf(object):
             ax = plt.gca()
 
         for act in range(nU):
-            ccolor = (act%2)*'g' + ((act+1)%2)*'y'
-            plt.bar(range(1,nT+1), postA[:,act], width, bottom = bottoms,
-                    color = ccolor)
+            ccolor = (act % 2) * 'g' + ((act + 1) % 2) * 'y'
+            plt.bar(range(1, nT + 1), postA[:, act], width, bottom=bottoms,
+                    color=ccolor)
             plt.ylim([0, 1])
-            plt.xlim([1,8])
+            plt.xlim([1, 8])
             plt.xticks([])
-            bottoms += postA[:,act]
+            bottoms += postA[:, act]
         plt.show()
 
-    def plot_real_states(self, real_states = None, actions = None,
-                         which_real = None, fignum = None, ax = None):
+    def plot_real_states(self, real_states=None, actions=None,
+                         which_real=None, fignum=None, ax=None):
         """ Plots the real states visited by the agent.
 
         When a which_real parameter is provided, only the physical states are
@@ -545,7 +561,6 @@ class Actinf(object):
         else:
             A = np.zeros(self.nT)
 
-
         nS = self.Ns
         nT = S.size
         if which_real is not None:
@@ -553,18 +568,17 @@ class Actinf(object):
         else:
             rem = self.nS
 
-
-        S = S%rem
+        S = S % rem
         nS = rem
-        Smatrix = np.zeros((nS,nT))
-        Smatrix[S[:-1], range(nT-1)] = 1
+        Smatrix = np.zeros((nS, nT))
+        Smatrix[S[:-1], range(nT - 1)] = 1
 
         if hasattr(self, 'thres'):
             thres = self.thres
         else:
             thres = S.max()
-        #TODO: remove this dependence on the task
-        maxy_plot = max(S.max(), self.thres)*1.2
+        # TODO: remove this dependence on the task
+        maxy_plot = max(S.max(), self.thres) * 1.2
         if ax is None:
             if fignum is None:
                 plt.figure()
@@ -572,15 +586,15 @@ class Actinf(object):
                 plt.figure(fignum)
             ax = plt.gca
 
-        plt.plot(S,'+-')
-        plt.plot(range(nT), np.ones(nT)*thres)
+        plt.plot(S, '+-')
+        plt.plot(range(nT), np.ones(nT) * thres)
         plt.ylim([0, maxy_plot])
         plt.ylabel('Accumulated points')
         plt.xlabel('Trial')
 
         plt.show
 
-    def expected_states(self, V = None, S = None):
+    def expected_states(self, V=None, S=None):
         """ Returns all the states expected to be visited in the future given
         a set of action sequences V and an initial state S. Both S and the
         output are probability distributions over all possible states.
@@ -605,11 +619,10 @@ class Actinf(object):
             S = self.S
         nv, nt = V.shape
         # Expected visited states:
-        xS = np.zeros((nv, nt+1, self.Ns))
-        xS[:,0,:] = S
+        xS = np.zeros((nv, nt + 1, self.Ns))
+        xS[:, 0, :] = S
         for v in range(nv):
-            for t in range(0,nt):
-                xS[v, t+1, :] = np.dot(B[V[v,t],:,:], xS[v, t, :])
+            for t in range(0, nt):
+                xS[v, t + 1, :] = np.dot(B[V[v, t], :, :], xS[v, t, :])
 
         return xS[:, 1:, :]
-

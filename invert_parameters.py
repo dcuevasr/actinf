@@ -97,6 +97,56 @@ def switch_shape_pars(shape_pars, force=None):
     return shape_pars_out
 
 
+def rules_for_shapes(shape_pars, number_states=72):
+    r"""Checks whether the shape described in --shape_pars-- meets the rules
+    established for distinguishing between shapes. These are as follow:
+    Gaussian: \mu + \sd < number_states
+    Sigmoid: sigmoid[number_states] > 0.95
+    Exponential: No especial rules.
+
+    The function returns True if the rules are met.
+    """
+    threshold = np.ceil(number_states / 1.2)
+
+    if shape_pars[0] == 'unimodal_s':
+        rules_met = shape_pars[1] + shape_pars[2] + threshold <= number_states
+    elif shape_pars[0] == 'sigmoid_s':
+        k = shape_pars[2] / 10  # see the definition of bc.set_prior_goals()
+        x0 = shape_pars[1] + threshold
+        y = 0.95
+        rules_met = number_states > -(1 / k) * np.log((1 / y) - 1) + x0
+    elif shape_pars[0] == 'exponential':
+        rules_met = True
+    else:
+        raise ValueError('The shape in shape_pars is not recognized')
+
+    return rules_met
+
+
+def rule_all(shapes=None):
+    """For each shape in --shapes--, creates a 1- or 2-dimensional array
+    (depending on the shape), where the (ix_par1, ix_par2) element contains
+    a 1 if (par1(ix_par1), par2(ix_par2)) meet the rule in rules_for_shapes();
+    0 otherwise.
+    """
+    if shapes is None:
+        shape_pars_all = __rds__()
+        shapes = [shape_pars[0] for shape_pars in shape_pars_all]
+
+    output = []
+    for shape in shapes:
+        shape_pars = __rds__(shape)
+        shape_size = [len(parx) for parx in shape_pars[1:]]
+        shape_iter = itertools.product(*shape_pars[1:])
+        rule_array = -1 * np.ones(shape_size)
+        for ix_ele, element in enumerate(shape_iter):
+            ix_pars = np.unravel_index(ix_ele, shape_size)
+            c_shape_pars = [shape_pars[0], ] + list(element)
+            rule_array[ix_pars] = np.array(rules_for_shapes(c_shape_pars))
+        output.append(rule_array)
+    return output
+
+
 def _remove_above_thres(deci, trial, state, thres, reihe, multiplier=1.2):
     """Removes any observation that goes above the cutoff. """
 
@@ -123,7 +173,8 @@ def preprocess_data(data_flat):
 
 
 def infer_parameters(data_flat=None, as_seen=None, no_calc=True,
-                     normalize=False, shape_pars=None, calc_Qs=False, return_Qs=False):
+                     normalize=False, shape_pars=None, calc_Qs=False,
+                     return_Qs=False):
     r""" Calculates the likelihood for every model provided.
 
     Each model is created with different values of the mean and sd of a
@@ -169,10 +220,7 @@ def infer_parameters(data_flat=None, as_seen=None, no_calc=True,
         $\mu$, then $\sigma$, and thus shape_pars = ['unimodal', range(-15,45),
         range(1,15)], where the grid search would be performed from -15 to 45
         in $\mu$.
-    num_games: int or tuple of ints
-        Select which games to use with 'small' or 'simulated'. Defaults to all
-        available games in the data, or 20 for 'simulated'.
-    data: dict
+    data_flat: dict
         Contains the data (observations) of the subjects (or simulated). Should
         contain the following keys:
             'obs': np.array[nObs], dtype = int
@@ -189,8 +237,23 @@ def infer_parameters(data_flat=None, as_seen=None, no_calc=True,
             'TargetLevels': np.array[(1)], dtype = int
                 All distinct threshold in the trial. It's equivalent to
                 np.unique(data['threshold']).
+    as_seen : dict
+        Contains all the posteriors calculated in a previous run of this function.
+        If this is provided, this function works as an 'unpacker', that is,
+        it extracts the posteriors from --as_seen-- and puts them in the normal
+        output of this function. If not provided, a pathetic attempt is made to
+        load it from file (legacy code, must die). If {} is provided, this
+        attempt is skipped, and all posteriors calculated. Read the entry for
+        --no_calc-- for information on how they interact.
+    no_calc : bool
+        If set to True, it will raise an error if the data contains an observation
+        for which there is no posterior in the provided --as_seen--. This is a
+        failsafe of sorts to avoid new calculations when you know that they should
+        all be included in the provided --as_seen--. Note that inputting
+        as_seen={} will force this to be False. This is a sanity check.
     normalize: bool
-        Determines whether the likelihoods should be 'marginalized'.
+        Determines whether the likelihoods should be 'marginalized'. This curse
+        from hell is no longer in use; it is only there for compatibility issues.
     calc_Qs: bool
         Whether or not to get the valuation over all action sequences from
         the active inference class. #TODO: make compatible with as_seen.
@@ -221,6 +284,9 @@ def infer_parameters(data_flat=None, as_seen=None, no_calc=True,
         data_flat)
 
     NuData = thres.size
+
+    if as_seen == {}:
+        no_calc = False
 
     if as_seen is None:
         data_file = './data/posteriors.pi'
@@ -285,7 +351,7 @@ def infer_parameters(data_flat=None, as_seen=None, no_calc=True,
             posta_inferred[index] = as_seen[current_state]
         else:
             if no_calc:
-                raise ValueError('Key %s not found' % index)
+                raise ValueError('Key %s not found' % (current_state,))
             flag_write_posta = True  # write to file if new stuff found
             mabed[thres[s]].lnC = np.log(mabed[thres[s]].set_prior_goals(
                 select_shape=select_shape,
@@ -308,22 +374,11 @@ def infer_parameters(data_flat=None, as_seen=None, no_calc=True,
           end='', flush=True)
     tini = time()
 
-    # Calculate data likelihood for all parameter values
-    # out_posteriors = simulate_posteriors(as_seen, shape_pars,
-    #                                      state, trial, thres,
-    #                                      arr_lnc, mabed, flag_write_posta,
-    #                                      mu_sigma, calc_Qs=calc_Qs)
-    # if calc_Qs is not True:
-    #     posta_inferred = out_posteriors
-    #     Qs = None
-    # else:
-    #     posta_inferred, Qs = out_posteriors
-
     print('Took: %d seconds.' % (time() - tini))
     atexit.unregister(_save_posteriors)
     if flag_write_posta is True:
-        _save_posteriors(posta_inferred, trial, state, thres, mu_sigma,
-                         aux_big_index, Qs=Qs)
+        Qs = _save_posteriors(posta_inferred, trial, state, thres, mu_sigma,
+                              aux_big_index, Qs=Qs)
     size_pa = size_ms[:-1]
     size_pa.append(NuData)
     size_pa.append(2)
@@ -617,6 +672,7 @@ def _save_posteriors(post_act, trial, state, thres, mu_sigma, aux_big_index,
             pickle.dump(q_out, mafi)
 
     print('Posteriors saved to %s' % out_file)
+    return q_out
 
 
 def concatenate_data(data_folder=None, out_file=None, old_files=None):
@@ -805,8 +861,8 @@ def _create_data_flat(mabe, deci, trial, state, thres, nD, nT, posta=None):
     return [data_flat]
 
 
-def calculate_posta_from_Q(alpha, Qs, old_alpha=64, data=None,
-                           guardar=True, regresar=False, filename=None):
+def calculate_posta_from_Q(alpha, Qs, old_alpha=64, guardar=True,
+                           regresar=False, filename=None):
     """ Calculates the posteriors over actions given the Qs of a previous run,
     the old value of gamma and a new value of gamma.
 
@@ -1338,65 +1394,65 @@ if __name__ == '__main__':
 
     print('pid: %s' % getpid())
 
-    parser = argparse.ArgumentParser()
+    PARSER = argparse.ArgumentParser()
 
-    help_par = """ Add parameter ranges. For each parameter in the grid search,
+    HELP_PAR = """ Add parameter ranges. For each parameter in the grid search,
     include the two values to specify the range to look in. It is assumed that
     every integer value in the range will be searched. To have more than one
     parameter, include the option once per parameter."""
 
-    parser.add_argument('--shape', help='Select goal shape. The available shapes can ' +
+    PARSER.add_argument('--shape', help='Select goal shape. The available shapes can ' +
                         'be found in betClass.set_prior_goals()', type=str)
-    parser.add_argument('-p', '--parameter', nargs=2, type=int,
-                        action='append', help=help_par)
-    parser.add_argument('subjects', nargs='+',
+    PARSER.add_argument('-p', '--parameter', nargs=2, type=int,
+                        action='append', help=HELP_PAR)
+    PARSER.add_argument('subjects', nargs='+',
                         help='Subject number. Can be more than one.', type=int)
-    parser.add_argument('-t', '--trials', nargs='+',
-                        help='List of trials to use', type=int)
-    parser.add_argument('-v', '--verbose',
+    PARSER.add_argument('-t', '--TRIALS', nargs='+',
+                        help='List of TRIALS to use', type=int)
+    PARSER.add_argument('-v', '--verbose',
                         help='Verbose flag', action='store_true')
-    parser.add_argument('-i', '--index',
+    PARSER.add_argument('-i', '--index',
                         help='A single index to select parameter values', type=int)
-    args = parser.parse_args()
+    ARGS = PARSER.parse_args()
 
-    if args.trials is None:
-        trials = [0, 1, 2, 3, 4, 5, 6, 7]
+    if ARGS.TRIALS is None:
+        TRIALS = [0, 1, 2, 3, 4, 5, 6, 7]
     else:
-        trials = args.trials
+        TRIALS = ARGS.TRIALS
 
-    if args.shape is None:
-        task = 'unimodal_s'
+    if ARGS.shape is None:
+        TASK = 'unimodal_s'
     else:
-        task = args.shape
-    shape_pars = [task]
-    par_values = []
-    if args.index is not None:
-        if task == 'unimodal_s':
-            par_values.append(__rds__()[0][1])  # np.arange(-15, 45+1))
-            par_values.append(__rds__()[0][2])  # np.arange(1, 15+1))
-        elif task == 'sigmoid_s':
-            par_values.append(__rds__()[1][1])  # np.arange(-15, 15+1))
-            par_values.append(__rds__()[1][2])  # np.arange(1, 30, 2))
-        elif task == 'exponential':
-            par_values.append(__rds__()[2][1])  # np.arange(5, 100, 2))
+        TASK = ARGS.shape
+    SHAPE_PARS = [TASK]
+    PAR_VALUES = []
+    if ARGS.index is not None:
+        if TASK == 'unimodal_s':
+            PAR_VALUES.append(__rds__()[0][1])  # np.arange(-15, 45+1))
+            PAR_VALUES.append(__rds__()[0][2])  # np.arange(1, 15+1))
+        elif TASK == 'sigmoid_s':
+            PAR_VALUES.append(__rds__()[1][1])  # np.arange(-15, 15+1))
+            PAR_VALUES.append(__rds__()[1][2])  # np.arange(1, 30, 2))
+        elif TASK == 'exponential':
+            PAR_VALUES.append(__rds__()[2][1])  # np.arange(5, 100, 2))
 
-        unravel_sizes = [len(x) for x in par_values]
+        UNRAVEL_SIZES = [len(x) for x in PAR_VALUES]
 
-        indices = np.unravel_index(args.index, unravel_sizes)
-        for i, index in enumerate(indices):
-            shape_pars.append([par_values[i][index]])
+        INDICES = np.unravel_index(ARGS.index, UNRAVEL_SIZES)
+        for i, index in enumerate(INDICES):
+            SHAPE_PARS.append([PAR_VALUES[i][index]])
     else:
-        for par in args.parameter:
-            shape_pars.append(range(*par))
+        for par in ARGS.parameter:
+            SHAPE_PARS.append(range(*par))
 
     # Print message stating what is to be calculated
-    if args.verbose:
-        print('Subjects to use: %s' % args.subjects)
+    if ARGS.verbose:
+        print('Subjects to use: %s' % ARGS.subjects)
 #        print('Mu and Sd intervals: (%d, %d), (%d, %d):'
 #              % (mu_range[0], mu_range[1], sd_range[0], sd_range[1]))
-        print('Task and parameters:', shape_pars)
-        print('Trials to use: %s' % trials)
+        print('Task and parameters:', SHAPE_PARS)
+        print('TRIALS to use: %s' % TRIALS)
     sys.stdout.flush()
-    main(data_type=['full', 'pruned'], shape_pars=shape_pars,
-         subject=args.subjects,
-         trials=trials, return_results=False, calc_Qs=True)
+    main(data_type=['full', 'pruned'], shape_pars=SHAPE_PARS,
+         subject=ARGS.subjects,
+         trials=TRIALS, return_results=False, calc_Qs=True)

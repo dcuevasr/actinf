@@ -100,7 +100,7 @@ class betMDP(afc.Actinf):
         self.obsnoise = 0  # 0.001 #0.0001
 
         if changePairs is True:
-            self.setMDPMultVar(obs_sd=obs_sd)
+            self.setMDPMultVar(parameters=actionPairs, obs_sd=obs_sd)
         else:
             self.setMDP(parameters=actionPairs, obs_sd=obs_sd)
 
@@ -215,7 +215,7 @@ class betMDP(afc.Actinf):
         nT = self.nT
 #        thres = self.thres
         obsnoise = self.obsnoise
-        if parameters != None:
+        if parameters is not None:
             if not isinstance(parameters, dict):
                 raise ValueError('Input ''parameters'' is not a dict')
             expectedParameters = ['pL', 'pH', 'rL', 'rH']
