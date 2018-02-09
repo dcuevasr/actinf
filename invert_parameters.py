@@ -22,6 +22,7 @@ import argparse
 from os import getpid
 from time import time
 import ipdb
+import copy
 
 import numpy as np
 
@@ -977,9 +978,14 @@ def find_files_subject(subject, shape, logs_path, outs_path, quts_path):
     return out_files, qut_files
 
 
-def invert_alpha(subjects, shape_pars, data_flat=None, alpha_vec=None,
-                 q_seen=None, regresar=True, guardar=False, create_qs=False,
-                 force_create=False):
+def invert_alpha(*args, **kwargs):
+    """Wrapper for infer_alpha() for compatibility issues."""
+    return infer_alpha(*args, **kwargs)
+
+
+def infer_alpha(subjects, shape_pars, data_flat=None, alpha_vec=None,
+                q_seen=None, regresar=True, guardar=False, create_qs=False,
+                force_create=False):
     """ Does a grid search over values of the hyperparameter alpha of
     active inference.
 
@@ -1021,6 +1027,39 @@ def invert_alpha(subjects, shape_pars, data_flat=None, alpha_vec=None,
             logli_out[subject] = logli
     if regresar is True:
         return logli_out
+
+
+def infer_bias(subjects=None, shape_pars=None, bias_vec=None, alpha_vec=None):
+    """Infers the best value for a bias over actions."""
+    if subjects is None:
+        subjects = range(35)
+
+    if shape_pars is None:
+        shape_pars = __rds__('exponential')
+
+    if bias_vec is None:
+        bias_vec = [0.1, 0.2, 0.5, 1, 2, 5, 10]
+
+    if alpha_vec is None:
+        alpha_vec = __rds__(alpha=True)[-1]
+
+    _, data_flat = imda.main()
+
+    logli = {}
+    for subject in subjects:
+        q_seen = load_or_calculate_q_file(subject, shape_pars[0], create=False)
+        for alpha in alpha_vec:
+            as_seen = calculate_posta_from_Q(
+                alpha, Qs=q_seen, guardar=False, regresar=True)
+            for bias in bias_vec:
+                tmp_as_seen = copy.deepcopy(as_seen)
+                for key in as_seen.keys():
+                    tmp_as_seen[key][0][1] *= bias
+                    tmp_as_seen[key][0] = tmp_as_seen[key][0] / \
+                        tmp_as_seen[key][0].sum()
+                logli[(subject, alpha, bias)] = infer_parameters(
+                    data_flat=data_flat[subject], as_seen=tmp_as_seen, shape_pars=shape_pars)[0]
+    return logli
 
 
 def load_or_calculate_q_file(subject, shape, create=True, force_create=False):
@@ -1150,62 +1189,62 @@ def calculate_likelihood_by_condition(subjects=[0, ], save=False):
     return logli_out
 
 
-def infer_bias(subjects=None, bias_vec=None, shape_pars=None, alphas=None, filename=None):
-    """Infers the bias parameter for a model that assumes that all subjects
-    have the same shape_pars, and the inter-subject differences are due to a
-    bias towards risky or safe.
+# def infer_bias(subjects=None, bias_vec=None, shape_pars=None, alphas=None, filename=None):
+#     """Infers the bias parameter for a model that assumes that all subjects
+#     have the same shape_pars, and the inter-subject differences are due to a
+#     bias towards risky or safe.
 
-    Parameters
-    ----------
-    subjects: list of ints
-    bias_vec: list of floats
-        Values for the grid search over the bias parameter.
-    shape_pars: ['shape', par1, par2, ...]
-        Assumed shape for all subjects. If None is given, one is inferred by
-        doing the full grid search.
+#     Parameters
+#     ----------
+#     subjects: list of ints
+#     bias_vec: list of floats
+#         Values for the grid search over the bias parameter.
+#     shape_pars: ['shape', par1, par2, ...]
+#         Assumed shape for all subjects. If None is given, one is inferred by
+#         doing the full grid search.
 
-    Returns
-    -------
-    logli: dict, keys are alpha values
-        Dictionary whose keys are the alpha values in __rds__(), and whose values
-        are the loglikelihood maps for the bias_vec.
-    """
-    if shape_pars is None:
-        _, shape_pars = maximum_likelihood_all_data(subjects)
-    if bias_vec is None:
-        bias_vec = __rds__(bias=True)
-    if subjects is None:
-        subjects = range(35)
-    if alphas is None:
-        _, alphas = __rds__(alpha=True)
+#     Returns
+#     -------
+#     logli: dict, keys are alpha values
+#         Dictionary whose keys are the alpha values in __rds__(), and whose values
+#         are the loglikelihood maps for the bias_vec.
+#     """
+#     if shape_pars is None:
+#         _, shape_pars = maximum_likelihood_all_data(subjects)
+#     if bias_vec is None:
+#         bias_vec = __rds__(bias=True)
+#     if subjects is None:
+#         subjects = range(35)
+#     if alphas is None:
+#         _, alphas = __rds__(alpha=True)
 
-    shape_pars = switch_shape_pars(shape_pars, force='list')
-    shape = shape_pars[0]
-    q_file_base = './data/qus_subj_%s_%s.pi'
-    _, data_flat = imda.main()
+#     shape_pars = switch_shape_pars(shape_pars, force='list')
+#     shape = shape_pars[0]
+#     q_file_base = './data/qus_subj_%s_%s.pi'
+#     _, data_flat = imda.main()
 
-    bias_logli = {}
-    for subject in subjects:
-        for alpha in alphas:
-            if alpha not in bias_logli:
-                bias_logli[alpha] = np.zeros(len(bias_vec))
-            q_file = q_file_base % (subject, shape)
-            as_seen = calculate_posta_from_Q(
-                alpha, q_file, guardar=False, regresar=True)
-            for ix_bias, bias in enumerate(bias_vec):
-                _bias_as_seen(bias, as_seen)
-                logli, _, _, _, _, _ = infer_parameters(
-                    data_flat=data_flat[subject], as_seen=as_seen, shape_pars=shape_pars)
-                if logli < -10000:
-                    ipdb.set_trace()
-                    return None
-                bias_logli[alpha][ix_bias] += logli[0][0]
-    if filename is None:
-        filename = './data/bias_logli.pi'
-    with open(filename, 'wb') as mafi:
-        pickle.dump(bias_logli, mafi)
+#     bias_logli = {}
+#     for subject in subjects:
+#         for alpha in alphas:
+#             if alpha not in bias_logli:
+#                 bias_logli[alpha] = np.zeros(len(bias_vec))
+#             q_file = q_file_base % (subject, shape)
+#             as_seen = calculate_posta_from_Q(
+#                 alpha, q_file, guardar=False, regresar=True)
+#             for ix_bias, bias in enumerate(bias_vec):
+#                 _bias_as_seen(bias, as_seen)
+#                 logli, _, _, _, _, _ = infer_parameters(
+#                     data_flat=data_flat[subject], as_seen=as_seen, shape_pars=shape_pars)
+#                 if logli < -10000:
+#                     ipdb.set_trace()
+#                     return None
+#                 bias_logli[alpha][ix_bias] += logli[0][0]
+#     if filename is None:
+#         filename = './data/bias_logli.pi'
+#     with open(filename, 'wb') as mafi:
+#         pickle.dump(bias_logli, mafi)
 
-    return bias_logli
+#     return bias_logli
 
 
 def _bias_as_seen(bias, as_seen):
