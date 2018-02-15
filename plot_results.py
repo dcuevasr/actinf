@@ -23,6 +23,7 @@ import import_data as imda
 from utils import calc_subplots
 import betClass as bc
 import clustering as cl
+import bias_analysis as ba
 # from figures import figure_colors, figure_fonts
 
 
@@ -1792,7 +1793,7 @@ def rank_likelihoods(subject, shapes=None, number_save=2, alpha=None,
     return biggest, keyest
 
 
-def rank_likelihoods_cond(subject, number_save=5, force_rule=False, alpha=None):
+def rank_likelihoods_cond(subject, number_save=1, force_rule=False, alpha=None):
     """Finds the best parameters for the subject, divided by condition.
     Makes use of the logli_alpha_subj_cond_shape.pi files created by
     invp.calculate_likelihood_by_condition().
@@ -1984,7 +1985,8 @@ def _one_agent_one_obs(*args, **kwargs):
     return one_agent_one_obs(*args, **kwargs)
 
 
-def one_agent_one_obs(subjects=(0, 1), best_keys=None, shapes=None, return_t=False):
+def one_agent_one_obs(subjects=(0, 1), best_keys=None, shapes=None,
+                      return_t=False, do_bias=False):
     """Retrieves the posterior distributions over actions for the subjects,
     using the best available model.
 
@@ -2002,31 +2004,40 @@ def one_agent_one_obs(subjects=(0, 1), best_keys=None, shapes=None, return_t=Fal
     posta_all: dict, len = len(subjects)
         ['posteriors', 'rp'] per subject. Keys are subject number.
     """
+    
+    filebase = './data/best_model_posta_subj_%s%s.pi' % ('%s', '' + '_bias' * do_bias)
 
+    if best_keys is None:
+        if not do_bias:
+            best_keys = loop_rank_likelihoods(subjects, number_save=1,
+                                            shapes=shapes)
+        else:
+            best_keys = ba.best_model(subjects, shapes=shapes)
+    bias = None
+    
     _, flata = imda.main()
     posta_all = {}
     risk_pressure = calc_risk_pressure(flata)
     for ix_sub, subject in enumerate(subjects):
         flag_calculate = True
-        if best_keys is None:
-            _, best_key = rank_likelihoods(
-                subject, number_save=1, shapes=shapes)
-            try:
-                with open('./data/best_model_posta_subj_%s.pi' % subject, 'rb') as mafi:
-                    as_seen = pickle.load(mafi)
-                    flag_calculate = False
-            except FileNotFoundError:
-                flag_calculate = True
-        else:
-            best_key = [best_keys[ix_sub]]
-        shape_pars = invp.switch_shape_pars(best_key[0][1], force='list')
-        alpha = best_key[0][0]
+        try:
+            with open(filebase % subject, 'rb') as mafi:
+                as_seen = pickle.load(mafi)
+            flag_calculate = False
+        except FileNotFoundError:
+            flag_calculate = True
+        shape_pars = invp.switch_shape_pars(best_keys[subject][1][0][-1],
+                                            force='list')
+        alpha = best_keys[subject][1][0][0]
+        if do_bias:
+            bias = best_keys[subject][1][0][1]
         if flag_calculate is True:
             q_seen = invp.load_or_calculate_q_file(
                 subject, shape_pars[0], create=False)
             as_seen = invp.calculate_posta_from_Q(alpha, q_seen, guardar=False,
-                                                  regresar=True)
-        _, posta, _, trial, _, _ = invp.infer_parameters(data_flat=flata[subject],
+                                                  regresar=True, bias=bias)
+        _, posta, _, trial, _, _ = invp.infer_parameters(data_flat=
+                                                         flata[subject],
                                                          shape_pars=shape_pars,
                                                          no_calc=True,
                                                          as_seen=as_seen)
@@ -2109,8 +2120,13 @@ def one_agent_many_obs(subjects=(0, 1), subjects_data=None, shapes=None, as_seen
     return posta_all
 
 
-def _plot_rp_vs_risky_own(subjects, axes=None, posta_all=None, regresar=False,
-                          color=None, shapes=None, **kwargs):
+def _plot_rp_vs_risky_own(*args, **kwargs):
+    """Wrapper for plot_rp_vs_risk_own() for compatibility."""
+    return plot_rp_vs_risky_own(*args, **kwargs)
+
+
+def plot_rp_vs_risky_own(subjects, axes=None, posta_all=None, regresar=False,
+                          color=None, shapes=None, do_bias=False, **kwargs):
     """Plots the probability of risky against risk pressure for the best model
     for each of the subjects in --subjects--.
 
@@ -2135,7 +2151,7 @@ def _plot_rp_vs_risky_own(subjects, axes=None, posta_all=None, regresar=False,
         axes = np.reshape(axes, -1)
 
     if posta_all is None:
-        posta_all = _one_agent_one_obs(subjects, shapes=shapes)
+        posta_all = _one_agent_one_obs(subjects, shapes=shapes, do_bias=do_bias)
 
     for ix_sub, subject in enumerate(subjects):
         maax = axes[ix_sub]
@@ -2202,7 +2218,12 @@ def _plot_rp_vs_risky_all(subjects, axes, subjects_data=None, shapes=None,
         return posta_all
 
 
-def _plot_average_risk_dynamics(subjects, posta_rp, maaxes, step_size=1,
+def _plot_average_risk_dynamics(*args, **kwargs):
+    """Wrapper for plot_average_risk_dynamics() for compatibility."""
+    return plot_average_risk_dynamics(*args, **kwargs)
+
+
+def plot_average_risk_dynamics(subjects, posta_rp, maaxes, step_size=1,
                                 legend='', regresar=False, color=None):
     """Plots the average posterior probability of risky."""
     # color = 'brown'  # figure_colors('lines_cmap')(0.5)
@@ -2246,11 +2267,7 @@ def _rp_vs_risky_subplot(risk_pr, posta, maax, color=None, alpha=1, offset=0):
     indices = risk_pr < 35
     maax.scatter(risk_pr[indices] + offset, posta[indices, 1],
                  color=color, alpha=alpha, s=4)
-    # for point, rp in enumerate(risk_pr):
-    #     if rp > 35:
-    #         continue
-    #     maax.plot(rp + offset, posta[point, 1], '.',
-    #               color=color, alpha=alpha, markersize=2)
+
     maax.set_ylim([0, 1])
 
 
@@ -2924,20 +2941,23 @@ def t_test(data, mu0, tail=None):
 
 
 def data_rp_vs_prisky_mod_all(subjects=None, rp_posta_filename=None,
-                              bins=3, rp_range=None):
+                              bins=3, rp_range=None, posta_all=None,
+                              do_bias=False):
     """Bins the preferences of subjects according to their fitted agents, much
     like data_rp_vs_prisky_exp() does for experimental data.
     """
+
     if subjects is None:
         subjects = range(35)
     if rp_range is None:
         rp_range = (0, 35)
-
-    if rp_posta_filename is None:
-        rp_posta = _one_agent_one_obs(subjects, shapes=['unimodal_s'])
-    else:
-        with open(rp_posta_filename, 'rb') as mafi:
-            rp_posta = pickle.load(mafi)
+    if posta_all is None:
+        if rp_posta_filename is None:
+            rp_posta = _one_agent_one_obs(subjects, shapes=['unimodal_s'],
+                                          do_bias=do_bias)
+        else:
+            with open(rp_posta_filename, 'rb') as mafi:
+                rp_posta = pickle.load(mafi)
 
     if isinstance(bins, int):
         rp_bins = np.linspace(rp_range[0], rp_range[1], bins)
@@ -2955,11 +2975,13 @@ def data_rp_vs_prisky_mod_all(subjects=None, rp_posta_filename=None,
     preferences = [rp_posta_all['posta'][np.where(
         binned_rp == x)[0]] for x in range(1, bins + 1)]
     prisky = np.array([np.mean(preference) for preference in preferences])
+
     return prisky, rp_bins
 
 
 def data_rp_vs_prisky_mod(subjects=None, rp_posta_filename=None,
-                          bins=3, rp_range=None, shapes=None):
+                          bins=3, rp_range=None, shapes=None, posta_all=None,
+                          do_bias=False):
     """Bins the preferences of subjects according to their fitted agents, much
     like data_rp_vs_prisky_exp() does for experimental data.
     """
@@ -2969,11 +2991,16 @@ def data_rp_vs_prisky_mod(subjects=None, rp_posta_filename=None,
         rp_range = (0, 35)
     if shapes is None:
         shapes = ['unimodal_s']
-    if rp_posta_filename is None:
-        rp_posta = _one_agent_one_obs(subjects, shapes=shapes)
+    if posta_all is None:
+        raise ValueError('yo?')
+        if rp_posta_filename is None:
+            rp_posta = _one_agent_one_obs(subjects, shapes=shapes,
+                                          do_bias=do_bias)
+        else:
+            with open(rp_posta_filename, 'rb') as mafi:
+                rp_posta = pickle.load(mafi)
     else:
-        with open(rp_posta_filename, 'rb') as mafi:
-            rp_posta = pickle.load(mafi)
+        rp_posta = posta_all
 
     if isinstance(bins, int):
         rp_bins = np.linspace(rp_range[0], rp_range[1], bins)
@@ -3069,7 +3096,8 @@ def data_rp_vs_prisky_exp(subjects=None, bins=3, rp_range=None):
 
 
 def plot_rp_bins(subjects=None, bins=4, rp_range=None, maaxes=None,
-                 modality='experimental', offset=0, color='brown', fignum=27):
+                 modality='experimental', offset=0, color='brown',
+                 do_bias=False, posta_all=None, fignum=27):
     """Plots subjects' preference for risky choices as a function of risk
     pressure.
 
@@ -3088,7 +3116,7 @@ def plot_rp_bins(subjects=None, bins=4, rp_range=None, maaxes=None,
     elif modality == 'model':
         prisky, bin_positions = data_rp_vs_prisky_mod(
             subjects, bins=bins, rp_range=rp_range,
-            rp_posta_filename='./one_vs_one_exp.pi')
+            rp_posta_filename=None, posta_all=posta_all, do_bias=do_bias)#'./one_vs_one_exp.pi')
         conf_int = None
 
     if maaxes is None:
@@ -3124,7 +3152,7 @@ def plot_rp_bins(subjects=None, bins=4, rp_range=None, maaxes=None,
 
 def plot_pr_vs_prisky_vs_data(subjects=None, posta_file=None, bins=5,
                               colors=['brown', 'green'], maaxes=None,
-                              fignum=28):
+                              do_bias=False, posta_all=None, fignum=28):
     """For each subject, plot the data-driven average preference for risky, and
     the model-driven preference for risky, both as a function of risk pressure.
     """
@@ -3149,7 +3177,8 @@ def plot_pr_vs_prisky_vs_data(subjects=None, posta_file=None, bins=5,
     plot_rp_bins(subjects, bins=bins, rp_range=rp_range, color=colors[0],
                  maaxes=maaxes, modality='experimental')
     plot_rp_bins(subjects, bins=bins, rp_range=rp_range, color=colors[1],
-                 maaxes=maaxes, modality='model')
+                 maaxes=maaxes, modality='model', posta_all=posta_all,
+                 do_bias=do_bias)
 
     # _plot_average_risk_dynamics(subjects, rp_posta, maaxes, color='brown')
     if flag_add_subplots:

@@ -20,10 +20,9 @@ import betClass as bc
 from utils import calc_subplots
 import clustering as cl
 import kolling_stats as ks
+import bias_analysis as ba
 
-
-SUBJECTS = (1, 9, 5)  # Default subjects for figures 3, 6, and 7
-
+SUBJECTS = (1, 7, 5)
 
 def new_data():
     """Create a data set for figure 7, with one threshold, and exactly one
@@ -190,8 +189,8 @@ def plot_best_shape(subjects=None, shapes=None, maax=None, fignum=3):
     best_pars = pr.loop_rank_likelihoods(subjects, shapes=shapes)
     mabe = bc.betMDP(nS=72, thres=50)
     for subject in subjects:
-        shape_pars = [best_pars[subject][1][0][1][0]] + \
-            best_pars[subject][1][0][1][1:]
+        shape_pars = [best_pars[subject][1][0][-1][0]] + \
+            best_pars[subject][1][0][-1][1:]
         lnc = mabe.set_prior_goals(
             shape_pars=shape_pars, convolute=False, cutoff=False, just_return=True)
         lnc /= lnc.max()
@@ -317,7 +316,7 @@ def scatter_kappas(subjects=None, shape=None, membership=None,
     best_pars = pr.loop_rank_likelihoods(subjects, shapes=[shape])
     kappa = np.zeros(len(subjects))
     for subject in best_pars.keys():
-        kappa[subject] = best_pars[subject][1][0][1][1]
+        kappa[subject] = best_pars[subject][1][0][-1][1]
 
     counter = 1
     for c_cluster in range(num_clusters):
@@ -338,8 +337,9 @@ def scatter_kappas(subjects=None, shape=None, membership=None,
     plt.show(block=False)
 
 
-def calc_posta_sim(shape=None, shape_pars=None, data_file=None, overwrite=False):
-    """Calculate posteriors for the set of simulated data, for all the 
+def calc_posta_sim(shape=None, shape_pars=None, data_file=None,
+                   overwrite=False):
+    """Calculate posteriors for the set of simulated data, for all the
     values of the shape parameter for --shape--. The resulting --_as_seen--
     is saved to files with the format './data/simulated_posta_per_trial_%2d.pi'
 
@@ -368,20 +368,23 @@ def calc_posta_sim(shape=None, shape_pars=None, data_file=None, overwrite=False)
     try:
         with open(data_file, 'rb') as mafi:
             flata = pickle.load(mafi)
-    except (FileNotFoundError):
+    except FileNotFoundError:
         flata = new_data()
 
     for par_num in range(len(shape_pars[1])):
         if shape == 'exponential':
-            filename = './data/simulated_posta_per_trial_%02d.pi' % shape_pars[1][par_num]
+            filename = './data/simulated_posta_per_trial_%02d.pi' \
+                       % shape_pars[1][par_num]
         else:
-            filename = './data/simulated_posta_per_trial_%02d.pi' % par_num
+            filename = './data/simulated_posta_per_trial_%02d.pi' \
+                       % par_num
         if isfile(filename) and overwrite:
             continue
         c_shape_pars = [shape_pars[0]] + [[shape_pars[x][par_num]]
                                           for x in range(1, len(shape_pars))]
         output = invp.infer_parameters(data_flat=flata, shape_pars=c_shape_pars,
-                                       return_Qs=True, as_seen={}, no_calc=False)
+                                       return_Qs=True, as_seen={},
+                                       no_calc=False)
 
         invp.calculate_posta_from_Q(alpha, Qs=output[-1], filename=filename)
 
@@ -398,7 +401,6 @@ def table_best_families(subjects, criterion='AIC'):
     Criterion to use to decide which family is best for each subject.  AIC
     stands for Akaike information criterion, ML for maximum likelihood.
     """
-    from tabulate import tabulate
     table_headers = ['Subject', 'Shape family']
     if criterion == 'AIC' or criterion == 'AICf':
         table_headers.append('dAIC')
@@ -443,7 +445,8 @@ def figure_kolling(fignum=102):
     plt.show(block=False)
 
 
-def figure_behavioral_rp(subjects=SUBJECTS, bins=5, rp_range=(0, 35), fignum=103):
+def figure_behavioral_rp(subjects=SUBJECTS, bins=5, rp_range=(0, 35),
+                         fignum=103):
     """Figure for behavioral data.
     (A) Histogram of the number of times each risk-pressure is encountered by
     all subjects.
@@ -600,9 +603,9 @@ def figure_parameter_values(subjects=None, shape=None, fignum=105):
     maax_lnc = plt.subplot2grid((2, 2), (0, 1), rowspan=1)
     maax_clu = plt.subplot2grid((2, 2), (1, 1), rowspan=1)
     alpha_hist(subjects, maax=maax_alpha, shapes=[
-               shape], color=figure_colors('histograms'), divisors='auto')
+        shape], color=figure_colors('histograms'), divisors='auto')
     if shape == 'unimodal_s':
-        centroids, membership, distorsion = cl.clustering(
+        centroids, membership, _= cl.clustering(
             subjects, k=3, clustering_type='kmeans', shape=shape)
         cluster_names = [[]] * 3
         cluster_names[centroids[:, 1].argmax()] = r'$\uparrow \sigma$'
@@ -631,7 +634,7 @@ def figure_parameter_values(subjects=None, shape=None, fignum=105):
 
 
 def figure_rp_vs_risky(subjects=None, subjects_data=None, all_others=False,
-                       shapes=None, fignum=106):
+                       shapes=None, do_bias=True, fignum=106):
     """Plots risk pressure vs probability of risky choice for --subjects - -.
     Additionaly, it plots risk pressure vs probability of the same subjects,
     but taking in all the observations of all subjects together.
@@ -681,14 +684,15 @@ def figure_rp_vs_risky(subjects=None, subjects_data=None, all_others=False,
     AB = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz'
     for ix_subj, subject in enumerate(subjects):
         maax = plt.subplot(outer_grid[ix_subj, 0])
-        posta_one = pr._plot_rp_vs_risky_own(
-            [subject], [maax], regresar=True, color=color_dots, shapes=shapes)
+        posta_one = pr.plot_rp_vs_risky_own(
+            [subject], [maax], regresar=True, color=color_dots, do_bias=do_bias,
+            shapes=shapes)
         posta_one_s = {subject: posta_one[subject]}
-        _ = pr._plot_average_risk_dynamics(subjects=[subject],
+        _ = pr.plot_average_risk_dynamics(subjects=[subject],
                                            posta_rp=posta_one_s,
                                            maaxes=[maax],
                                            legend='Own contexts',
-                                           regresar=True, color=color_avgs)
+                                           regresar=True, color=color_avgs,)
         if maax.is_last_row():
             maax.set_xlabel('Risk pressure')
         else:
@@ -712,9 +716,10 @@ def figure_rp_vs_risky(subjects=None, subjects_data=None, all_others=False,
                                                  axes=[maax],
                                                  subjects_data=subjects_data,
                                                  regresar=True,
-                                                 color=color_dots, shapes=shapes)
+                                                 color=color_dots,
+                                                 shapes=shapes)
             posta_all_s = {subject: posta_all[subject]}
-            _ = pr._plot_average_risk_dynamics(subjects=[subject],
+            _ = pr.plot_average_risk_dynamics(subjects=[subject],
                                                posta_rp=posta_all_s,
                                                maaxes=[maax],
                                                legend='All contexts',
@@ -733,6 +738,8 @@ def figure_rp_vs_risky(subjects=None, subjects_data=None, all_others=False,
         maax = plt.subplot(outer_grid[ix_subj, -1])
         pr.plot_pr_vs_prisky_vs_data(subjects=[subject], maaxes=[maax],
                                      bins=np.array([0, 5, 10, 15]),
+                                     do_bias=do_bias,
+                                     posta_all=posta_one_s,
                                      colors=[color_data, color_avgs])
         maax.set_ylim([0, 1])
         maax.set_title('Method comparison')
@@ -748,7 +755,7 @@ def figure_rp_vs_risky(subjects=None, subjects_data=None, all_others=False,
         if maax.is_last_row():
             maax.set_xlabel('Risk pressure')
 
-    outer_grid.tight_layout(fig)
+    # outer_grid.tight_layout(fig)
     plt.show(block=False)
 
 
@@ -796,7 +803,7 @@ def fake_sim_data(parameters, shape=None):
     return sim_data, shape_pars
 
 
-def _get_posta_all(subjects, data_flat, as_seen, shape_pars_all, best_pars,
+def _get_posta_all(subjects, data_flat, as_seen_all, shape_pars_all, best_pars,
                    no_calc):
     """For figure_posta_per_trial().
 
@@ -805,9 +812,10 @@ def _get_posta_all(subjects, data_flat, as_seen, shape_pars_all, best_pars,
     posta_all = {}
     rp = pr.calc_risk_pressure(data_flat)
     for ix_subject, subject in enumerate(subjects):
+        as_seen = as_seen_all[subject]
         if shape_pars_all is None:
             shape_pars = invp.switch_shape_pars(
-                best_pars[subject][1][0][1], force='list')
+                best_pars[subject][1][0][-1], force='list')
         else:
             shape_pars = shape_pars_all[ix_subject]
         # if ix_subject == 0:
@@ -816,6 +824,7 @@ def _get_posta_all(subjects, data_flat, as_seen, shape_pars_all, best_pars,
             data_flat=data_flat[subject], shape_pars=shape_pars,
             no_calc=no_calc, return_Qs=True, as_seen=as_seen)
         if le_q is {}:
+            raise ValueError('qs empty')
             posta = invp.calculate_posta_from_Q(20, le_q,
                                                 regresar=True, guardar=False)
         posta_all[subject] = {
@@ -852,29 +861,34 @@ def _pretty_plots_per_trial(maaxes, subjects, colors_avgs, colors_dots):
 
 
 def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
-                           shape_pars_all=None, fignum=107):
+                           shape_pars_all=None, do_bias=True, fignum=107):
     """Similar to figure_rp_vs_risky, but with data divided into trials, with
     one subplot per trial.
 
     All inputs default to those from the paper.
     """
+    if subjects is None:
+        subjects = SUBJECTS[:-1]
+
     if shapes is None:
         shapes = ['exponential']
 
+    if do_bias is False:
+        rank_fun = pr.loop_rank_likelihoods
+    else:
+        rank_fun = ba.best_model
+        
     if sim_data is None:
-        best_pars = pr.loop_rank_likelihoods(subjects=subjects, number_save=1,
-                                             shapes=shapes)
+        best_pars = rank_fun(subjects=subjects, number_save=1, shapes=shapes)
         no_calc = False
     else:
         no_calc = True
 
-    if subjects is None:
-        subjects = SUBJECTS[:-1]
     if sim_data is None:
         filename_base = './data/simulated_posta_per_trial_%02d.pi'
         sim_data = []
         for subject in subjects:
-            sim_data.append(filename_base % best_pars[subject][1][0][1][1])
+            sim_data.append(filename_base % best_pars[subject][1][0][-1][1])
         sim_data.append('./data/data_flat_per_trial.pi')
 
     # Grab simulated observations:
@@ -885,14 +899,17 @@ def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
             data_flat[subject] = temp_data
 
     # Attempt to load as_seen.
-    as_seen = {}
-    for ix_sub, _ in enumerate(subjects):
+    as_seen_all = {}
+    for ix_sub, subject in enumerate(subjects):
         try:
             with open(sim_data[ix_sub], 'rb') as mafi:
-                as_seen.update(pickle.load(mafi))
+                as_seen_all[subject] = pickle.load(mafi)
+                if do_bias is True:
+                    invp.apply_bias(as_seen_all[subject],
+                                    best_pars[subject][1][0][1])
+                #as_seen.update(new_seen)
         except FileNotFoundError:
             raise
-
     fig = plt.figure(fignum)
     fig.clear()
     for trial in range(8):
@@ -904,7 +921,7 @@ def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
     colors_dots = colors_avgs
     colors_dots /= colors_dots.max(axis=1, keepdims=True)
 
-    posta_all = _get_posta_all(subjects, data_flat, as_seen, shape_pars_all,
+    posta_all = _get_posta_all(subjects, data_flat, as_seen_all, shape_pars_all,
                                best_pars, no_calc)
 
     for ix_sub, subject in enumerate(subjects):
@@ -912,10 +929,13 @@ def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
             offset = ix_sub * 0.4
             maax = maaxes[trial]
             these_trials = posta_all[subject]['trial'] == trial
-            this_posta = {subject: {'rp': posta_all[subject]['rp'][these_trials],
-                                    'posta': posta_all[subject]['posta'][these_trials, :]}}
-            pr._plot_rp_vs_risky_own([subject], axes=[maax], posta_all=this_posta,
-                                     color=colors_dots[ix_sub], offset=offset, alpha=0.2)
+            this_posta = {subject: {
+                'rp': posta_all[subject]['rp'][these_trials],
+                'posta': posta_all[subject]['posta'][these_trials, :]}}
+            pr._plot_rp_vs_risky_own([subject], axes=[maax],
+                                     posta_all=this_posta,
+                                     color=colors_dots[ix_sub], offset=offset,
+                                     alpha=0.2)
 
     for ix_sub, subject in enumerate(subjects):
         for trial in range(8):
@@ -930,7 +950,7 @@ def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
 
     fig.tight_layout()
     plt.show(block=False)
-    return posta_all
+    #return posta_all
 
 
 def sup_figure_behavioral_rp(subjects=range(35), bins=4, rp_range=None, fignum=201):
@@ -1013,7 +1033,7 @@ def sup_table_parameters():
         mafi.write('Subject, Alpha, Kappa\n')
         for subject in range(35):
             data = [subject, best_pars[subject][1][0]
-                    [0], best_pars[subject][1][0][1][1]]
+                    [0], best_pars[subject][1][0][1][-1]]
             mafi.write(''.join(['%s, ' % datum for datum in data]) + '\n')
 
 

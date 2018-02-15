@@ -42,7 +42,7 @@ def return_default_pars(shape=None, alpha=False, bias=False, end_values=False):
     """
 
     if bias:
-        return np.linspace(0, 1, 10, endpoint=False)[1:]
+        return [0.2, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2, 2, 5, 10]
     if end_values:
         divisor = 10
         var_type = 'float64'
@@ -863,7 +863,7 @@ def _create_data_flat(mabe, deci, trial, state, thres, nD, nT, posta=None):
 
 
 def calculate_posta_from_Q(alpha, Qs, old_alpha=64, guardar=True,
-                           regresar=False, filename=None):
+                           regresar=False, filename=None, bias=None):
     """ Calculates the posteriors over actions given the Qs of a previous run,
     the old value of gamma and a new value of gamma.
 
@@ -879,8 +879,12 @@ def calculate_posta_from_Q(alpha, Qs, old_alpha=64, guardar=True,
         Whether or not to save the results to file. Note that this option
         and --regresar-- are not mutually exclusive.
     regresar: bool
-        Whether or not to return the results to the caller. Note that this option
-        and --guardar-- are not mutually exclusive.
+        Whether or not to return the results to the caller. Note that this
+        option and --guardar-- are not mutually exclusive.
+    bias : float or None
+    If not None, a multiplicative bias is incorporated into the posteriors. To
+    do this, the posterior of the risky choice (component 1) is multiplied by
+    the bias and the posterior re-normalized.
     """
 
     if isinstance(Qs, str):
@@ -899,7 +903,11 @@ def calculate_posta_from_Q(alpha, Qs, old_alpha=64, guardar=True,
         mGa = ratio * cGa
         exp_q = np.exp(mGa * cQs)
         posta[key] = [
-            np.array([exp_q[V[:, 0] == 0].sum(), exp_q[V[:, 0] == 1].sum()]), mGa]
+            np.array([exp_q[V[:, 0] == 0].sum(), exp_q[V[:, 0] == 1].sum()]),
+            mGa]
+        if not(bias is None):
+            # print(posta[key])
+            posta[key][0][1] *= bias
         posta[key][0] /= posta[key][0].sum()
 
     if guardar is True:
@@ -1012,16 +1020,19 @@ def infer_alpha(subjects, shape_pars, data_flat=None, alpha_vec=None,
     for subject in subjects:
         if q_seen_flag is False:
             q_seen = load_or_calculate_q_file(
-                subject, shape_pars[0], create=create_qs, force_create=force_create)
+                subject, shape_pars[0], create=create_qs,
+                force_create=force_create)
         logli = {}
         for alpha in alpha_vec:
             posta = calculate_posta_from_Q(alpha, Qs=q_seen, guardar=False,
                                            regresar=True)
-            tmp_out = infer_parameters(data_flat=data_flat[subject], as_seen=posta,
+            tmp_out = infer_parameters(data_flat=data_flat[subject],
+                                       as_seen=posta,
                                        shape_pars=shape_pars)
             logli[int(alpha * 10) / 10] = tmp_out[0]
         if guardar is True:
-            with open('./data/alpha_logli_subj_%s_%s.pi' % (subject, shape_pars[0]), 'wb') as mafi:
+            with open('./data/alpha_logli_subj_%s_%s.pi'
+                      % (subject, shape_pars[0]), 'wb') as mafi:
                 pickle.dump(logli, mafi)
         if regresar is True:
             logli_out[subject] = logli
@@ -1053,18 +1064,37 @@ def infer_bias(subjects=None, shape_pars=None, bias_vec=None, alpha_vec=None):
                 alpha, Qs=q_seen, guardar=False, regresar=True)
             for bias in bias_vec:
                 tmp_as_seen = copy.deepcopy(as_seen)
-                for key in as_seen.keys():
-                    tmp_as_seen[key][0][1] *= bias
-                    tmp_as_seen[key][0] = tmp_as_seen[key][0] / \
-                        tmp_as_seen[key][0].sum()
+                apply_bias(tmp_as_seen, bias)
                 logli[(subject, alpha, bias)] = infer_parameters(
-                    data_flat=data_flat[subject], as_seen=tmp_as_seen, shape_pars=shape_pars)[0]
+                    data_flat=data_flat[subject], as_seen=tmp_as_seen,
+                    shape_pars=shape_pars)[0]
     return logli
 
 
+def apply_bias(as_seen, bias):
+    """Applies the multiplicative --bias-- to the risky (component 1)
+    probability for every key in --as_seen-- and re-normalizes.
+
+    Works in-place.
+    """
+    for key in as_seen.keys():
+        as_seen[key][0][1] *= bias
+        as_seen[key][0] = as_seen[key][0] / as_seen[key][0].sum()
+
 def load_or_calculate_q_file(subject, shape, create=True, force_create=False):
-    """Loads the Q file for the provided subject and shape. If it is not found, it attempts
-    to create it. The attempt can be toggled off by --create--.
+    """Loads the Q file for the provided subject and shape. If it is not found,
+    it attempts to create it. The attempt can be turned off by --create--.
+
+    Parameters
+    ----------
+    create : bool
+    Whether to attempt to re-calculate the posteriors if the expected file
+    is not found or is corrupt. If the file is found, this will be ignored.
+
+    force_create : bool
+    If True, posteriors will be re-calculated using load_or_calculate_q_file(),
+    even if the corresponding file does exist.
+
     """
     flag_filename = False
     while_count = 0
@@ -1084,16 +1114,19 @@ def load_or_calculate_q_file(subject, shape, create=True, force_create=False):
                 create_Q_file_subject(
                     subject, shape=shape, output_file=filename)
             except:
-                raise Exception('Qs file %s not found. The feeble attempt to create it' +
-                                ' failed miserably, like everything I do.' % filename)
+                raise Exception('Qs file %s not found. The feeble attempt to ' +
+                                'create it failed miserably, like everything ' +
+                                'I do.' % filename)
             while_count += 1
         if while_count > 2:
             raise Exception('Uh... something weird happened')
+
     return q_seen
 
 
-def create_Q_file_subject(subject, shape='unimodal_s', logs_path=None, outs_path=None,
-                          quts_path=None, output_file=None, overwrite=False):
+def create_Q_file_subject(subject, shape='unimodal_s', logs_path=None,
+                          outs_path=None, quts_path=None, output_file=None,
+                          overwrite=False):
     """ Creates a .pi files with all the Qs and Gammas for one subject, all
     observations.
     """
@@ -1134,7 +1167,6 @@ def transform_shape_pars(shape_indices):
             continue
         shape_values.append(shape_pars_vec[index][par_index])
     return shape_values
-
 
 def calculate_likelihood_by_condition(subjects=[0, ], save=False):
     """Calculates the likelihood for the given subjects for all parameters,

@@ -8,3 +8,4 @@ import invert_parameters as invp
 import plot_results as pr
 import clustering as cl
 import figures as fg
+import bias_analysis as ba
