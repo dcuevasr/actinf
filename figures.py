@@ -22,7 +22,8 @@ import clustering as cl
 import kolling_stats as ks
 import bias_analysis as ba
 
-SUBJECTS = (1, 7, 5)
+SUBJECTS = (1, 31, 5)
+
 
 def new_data():
     """Create a data set for figure 7, with one threshold, and exactly one
@@ -80,10 +81,9 @@ def alpha_hist(subjects=None, maax=None, fignum=1, color=None, divisors=None,
         color = 'black'
 
     if divisors is None:
-        divisors = (0, 0.5, 1, 1.5, 2, 3, 50)
+        divisors = 'auto'  # (0, 0.5, 1, 1.5, 2, 3, 50)
 
-    best_pars = pr.loop_rank_likelihoods(
-        subjects, number_save=1, shapes=shapes)
+    best_pars = ba.best_model(subjects, shapes=shapes)
     alphas = []
     for subject in subjects:
         alphas.append(best_pars[subject][1][0][0])
@@ -107,6 +107,51 @@ def alpha_hist(subjects=None, maax=None, fignum=1, color=None, divisors=None,
     maax.set_xticklabels(x_labels, fontsize=8)
     plt.show(block=False)
     return alphas, hist, bins
+
+
+def bias_hist(subjects=None, maax=None, fignum=7, color=None, divisors=None,
+              shapes=None):
+    """Plots a histogram of the values for the alpha parameter for the all
+    the given subjects.
+    """
+    if subjects is None:
+        subjects = range(35)
+
+    if maax is None:
+        fig = plt.figure(fignum)
+        plt.clf()
+        maax = plt.gca()
+
+    if color is None:
+        color = 'black'
+
+    if divisors is None:
+        divisors = 'auto'  # (0, 0.5, 1, 1.5, 2, 3, 50)
+
+    best_pars = ba.best_model(subjects, shapes=shapes)
+    bias = []
+    for subject in subjects:
+        bias.append(best_pars[subject][1][0][1])
+
+    hist, bins = np.histogram(bias, bins=divisors)
+
+    x_tick_ranges = []
+    for ix_div, _ in enumerate(bins[:-1]):
+        x_tick_ranges.append([bins[ix_div], bins[ix_div + 1]])
+    x_labels = []
+    for x_tick in x_tick_ranges:
+        x_labels.append('[%2.1f, %2.1f)' % (x_tick[0], x_tick[1]))
+    #x_labels.append(r'$>$ %2.1f' % bins[-2])
+
+    maax.bar(range(len(hist)), hist, width=1, color=color)
+    # maax.set_title(r'Histogram of values of MDM')
+    maax.set_title('B', loc='left')
+    maax.set_xlabel('Choice bias')
+    maax.set_ylabel(r'Number of subjects')
+    maax.set_xticks(np.arange(len(hist)) + 0.5)
+    maax.set_xticklabels(x_labels, fontsize=8)
+    plt.show(block=False)
+    return bias, hist, bins
 
 
 def likelihood_map(subjects=(4, 1), shapes=None,
@@ -240,7 +285,7 @@ def plot_cluster_shapes(subjects=None, maax=None, shape=None, colors=None,
         maax.fill_between(shaded_threshold, 0, maax.get_ylim()
                           [-1], alpha=0.1, color=bg_color)
     # maax.set_title('Cluster centers'' shapes')
-    maax.set_title('B', loc='left')
+    maax.set_title('C', loc='left')
     maax.set_xlabel('points')
     maax.set_ylabel('valuation (a.u.)')
     if not flag_noshow:
@@ -334,6 +379,7 @@ def scatter_kappas(subjects=None, shape=None, membership=None,
     maax.set_yticklabels(np.array(maax.get_yticks() / 10, dtype=int))
     maax.set_xlabel('Subjects')
     maax.set_ylabel('Sensitivity to points (STP)')
+    maax.set_title('D', loc='left')
     plt.show(block=False)
 
 
@@ -457,7 +503,7 @@ def figure_behavioral_rp(subjects=SUBJECTS, bins=5, rp_range=(0, 35),
     _, flata = imda.main()
     outer_grid = gs.GridSpec(1, 2, width_ratios=(2, 1))
 
-    friendly_color = figure_colors('one line')
+    friendly_color = figure_colors('lines_cmap')(0.2)
 
     # A
     maax = plt.subplot(outer_grid[0])
@@ -599,13 +645,17 @@ def figure_parameter_values(subjects=None, shape=None, fignum=105):
     cmap = figure_colors('lines_cmap')
     colors = [cmap(x) for x in np.linspace(0, 1, num_colors)]
 
-    maax_alpha = plt.subplot2grid((2, 2), (0, 0), rowspan=2)
-    maax_lnc = plt.subplot2grid((2, 2), (0, 1), rowspan=1)
+    maax_alpha = plt.subplot2grid((2, 2), (0, 0), rowspan=1)
+    maax_bias = plt.subplot2grid((2, 2), (0, 1), rowspan=1)
+    maax_lnc = plt.subplot2grid((2, 2), (1, 0), rowspan=1)
     maax_clu = plt.subplot2grid((2, 2), (1, 1), rowspan=1)
     alpha_hist(subjects, maax=maax_alpha, shapes=[
         shape], color=figure_colors('histograms'), divisors='auto')
+    bias_hist(subjects, maax=maax_bias, shapes=[shape],
+              color=figure_colors('histograms'),
+              divisors=np.linspace(0.6, 1.2, 7))
     if shape == 'unimodal_s':
-        centroids, membership, _= cl.clustering(
+        centroids, membership, _ = cl.clustering(
             subjects, k=3, clustering_type='kmeans', shape=shape)
         cluster_names = [[]] * 3
         cluster_names[centroids[:, 1].argmax()] = r'$\uparrow \sigma$'
@@ -674,7 +724,7 @@ def figure_rp_vs_risky(subjects=None, subjects_data=None, all_others=False,
 
     color_dots = figure_colors('histograms')
     color_avgs = figure_colors('lines_cmap')(0.1)
-    color_data = figure_colors('one line')
+    color_data = figure_colors('lines_cmap')(0.2)
 
     fig = plt.figure(fignum, figsize=[9, 6])
     fig.clear()
@@ -689,10 +739,10 @@ def figure_rp_vs_risky(subjects=None, subjects_data=None, all_others=False,
             shapes=shapes)
         posta_one_s = {subject: posta_one[subject]}
         _ = pr.plot_average_risk_dynamics(subjects=[subject],
-                                           posta_rp=posta_one_s,
-                                           maaxes=[maax],
-                                           legend='Own contexts',
-                                           regresar=True, color=color_avgs,)
+                                          posta_rp=posta_one_s,
+                                          maaxes=[maax],
+                                          legend='Own contexts',
+                                          regresar=True, color=color_avgs,)
         if maax.is_last_row():
             maax.set_xlabel('Risk pressure')
         else:
@@ -720,10 +770,10 @@ def figure_rp_vs_risky(subjects=None, subjects_data=None, all_others=False,
                                                  shapes=shapes)
             posta_all_s = {subject: posta_all[subject]}
             _ = pr.plot_average_risk_dynamics(subjects=[subject],
-                                               posta_rp=posta_all_s,
-                                               maaxes=[maax],
-                                               legend='All contexts',
-                                               regresar=True, color=color_avgs)
+                                              posta_rp=posta_all_s,
+                                              maaxes=[maax],
+                                              legend='All contexts',
+                                              regresar=True, color=color_avgs)
             # maax.set_xticks([])
             if maax.is_last_row():
                 maax.set_xlabel('Risk pressure')
@@ -860,8 +910,25 @@ def _pretty_plots_per_trial(maaxes, subjects, colors_avgs, colors_dots):
         maax.legend(fontsize=8)
 
 
+def trim_data(value, field, flata=None, create_data=False, filename=None):
+    """Takes simulated observations and keeps only those that match --offer--."""
+    if flata is None:
+        if create_data:
+            flata = new_data()
+        else:
+            if filename is None:
+                filename = './data/data_flat_per_trial.pi'
+            with open(filename, 'rb') as mafi:
+                flata = pickle.load(mafi)
+    indices = flata[field] == value
+    for field in ['choice', 'obs', 'reihe', 'threshold', 'trial']:
+        flata[field] = flata[field][indices]
+    return flata
+
+
 def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
-                           shape_pars_all=None, do_bias=True, fignum=107):
+                           shape_pars_all=None, do_bias=True, trim=None,
+                           fignum=107):
     """Similar to figure_rp_vs_risky, but with data divided into trials, with
     one subplot per trial.
 
@@ -877,7 +944,7 @@ def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
         rank_fun = pr.loop_rank_likelihoods
     else:
         rank_fun = ba.best_model
-        
+
     if sim_data is None:
         best_pars = rank_fun(subjects=subjects, number_save=1, shapes=shapes)
         no_calc = False
@@ -895,6 +962,8 @@ def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
     with open(sim_data[-1], 'rb') as mafi:
         data_flat = {}
         temp_data = pickle.load(mafi)
+        if not trim is None:
+            temp_data = trim_data(trim, field='reihe', flata=temp_data)
         for subject in subjects:
             data_flat[subject] = temp_data
 
@@ -907,7 +976,7 @@ def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
                 if do_bias is True:
                     invp.apply_bias(as_seen_all[subject],
                                     best_pars[subject][1][0][1])
-                #as_seen.update(new_seen)
+                # as_seen.update(new_seen)
         except FileNotFoundError:
             raise
     fig = plt.figure(fignum)
@@ -917,7 +986,7 @@ def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
     maaxes = fig.get_axes()
 
     cmap = figure_colors('lines_cmap')
-    colors_avgs = np.array([cmap(x) for x in np.linspace(0, 1, len(subjects))])
+    colors_avgs = np.array([cmap(x) for x in np.linspace(0, 1, 3)])
     colors_dots = colors_avgs
     colors_dots /= colors_dots.max(axis=1, keepdims=True)
 
@@ -950,7 +1019,7 @@ def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
 
     fig.tight_layout()
     plt.show(block=False)
-    #return posta_all
+    # return posta_all
 
 
 def sup_figure_behavioral_rp(subjects=range(35), bins=4, rp_range=None, fignum=201):
