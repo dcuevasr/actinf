@@ -292,6 +292,123 @@ def plot_cluster_shapes(subjects=None, maax=None, shape=None, colors=None,
         plt.show(block=False)
 
 
+def fake_sim_data(parameters, shape=None):
+    """Creates a list --sim_data-- to feed to figure_posta_per_trial(). This
+    is to use figure_posta_per_trial() with any shape_pars desired, instead
+    of on relying on using --subjects--.
+
+    WILL NOT WORK WITH ANYTHING OTHER THAN EXPONENTIAL.
+
+    Parameters
+    ----------
+    pars : array-like
+        List of parameter values to use. It should be provided in the format
+        [[par1_1, par1_2, ...], [par2_1, par2_2, ...], ..., [parn_1, ...]].
+
+    Returns
+    -------
+    sim_data : list of chars
+        List of filenames of the form './data/simulated_posta_per_trial_%02d'
+        which is fed to figure_posta_per_trial(). Each filename contains the
+        simulated posteriors (in the form of --as_seen--) for the corresponding
+        parameter values.
+    """
+    if shape is None:
+        shape = 'exponential'
+
+    if shape != 'exponential':
+        raise NotImplementedError('This function only works now with' +
+                                  ' the exponential shape.')
+
+    filename_skel = './data/simulated_posta_per_trial_%02d.pi'
+    num_pars = len(parameters)
+    num_par_vals = len(parameters[0])
+    sim_data = []
+    shape_pars = []
+    for ix_num_par in range(num_pars):
+        for ix_num_par_val in range(num_par_vals):
+            sim_data.append(filename_skel %
+                            parameters[ix_num_par][ix_num_par_val])
+            shape_pars.append(
+                [shape, [parameters[ix_num_par][ix_num_par_val]]])
+    sim_data.append('./data/data_flat_per_trial.pi')
+
+    return sim_data, shape_pars
+
+
+def _get_posta_all(subjects, data_flat, as_seen_all, shape_pars_all, best_pars,
+                   no_calc):
+    """For figure_posta_per_trial().
+
+    Gets --posta_all-- for all the subjects, which contains the risk
+    pressure for all observations in --data_flat-- and the posteriors."""
+    posta_all = {}
+    rp = pr.calc_risk_pressure(data_flat)
+    for ix_subject, subject in enumerate(subjects):
+        as_seen = as_seen_all[subject]
+        if shape_pars_all is None:
+            shape_pars = invp.switch_shape_pars(
+                best_pars[subject][1][0][-1], force='list')
+        else:
+            shape_pars = shape_pars_all[ix_subject]
+        # if ix_subject == 0:
+        #     ipdb.set_trace()
+        _, posta, _, trial, _, _, le_q = invp.infer_parameters(
+            data_flat=data_flat[subject], shape_pars=shape_pars,
+            no_calc=no_calc, return_Qs=True, as_seen=as_seen)
+        if le_q is {}:
+            raise ValueError('qs empty')
+            posta = invp.calculate_posta_from_Q(20, le_q,
+                                                regresar=True, guardar=False)
+        posta_all[subject] = {
+            'rp': rp[subject], 'posta': np.squeeze(posta), 'trial': trial}
+    return posta_all
+
+
+def _pretty_plots_per_trial(maaxes, subjects, colors_avgs, colors_dots):
+    """Makes the plots in figure_posta_per_trial() prettier by moving around
+    the ticks and labels and stuff.
+    """
+    for ix_maax, maax in enumerate(maaxes):
+        maax.set_xlim([0, 35])
+        maax.set_ylim([0, 1])
+        maax.set_xticklabels(np.array(maax.get_xticks(), dtype=int) * 10)
+        maax.set_title('trial: %d' % (ix_maax + 1),
+                       loc='left', fontdict={'fontsize': 10})
+        if maax.is_last_row():
+            maax.set_xlabel('Risk pressure')
+        else:
+            maax.set_xticks([])
+        if maax.is_first_col():
+            maax.set_ylabel('P(risky)')
+        else:
+            maax.set_yticks([])
+
+    # Awesome legends!
+    if len(subjects) == 2:
+        labels = ['highSTP', 'lowSTP']
+        maax = maaxes[0]
+        for ix_sub, _ in enumerate(subjects):
+            maax.plot([], color=colors_avgs[ix_sub], label=labels[ix_sub])
+        maax.legend(fontsize=8)
+
+
+def trim_data(value, field, flata=None, create_data=False, filename=None):
+    """Takes simulated observations and keeps only those that match --offer--."""
+    if flata is None:
+        if create_data:
+            flata = new_data()
+        else:
+            if filename is None:
+                filename = './data/data_flat_per_trial.pi'
+            with open(filename, 'rb') as mafi:
+                flata = pickle.load(mafi)
+    indices = flata[field] == value
+    for field in ['choice', 'obs', 'reihe', 'threshold', 'trial']:
+        flata[field] = flata[field][indices]
+    return flata
+
+
 def histogram_clusters(subjects=None, shape=None, membership=None,
                        colors=None, labels=None, maax=None, fignum=5):
     """Makes a bar plot for membership of subjects in clusters."""
@@ -807,123 +924,6 @@ def figure_rp_vs_risky(subjects=None, subjects_data=None, all_others=False,
 
     # outer_grid.tight_layout(fig)
     plt.show(block=False)
-
-
-def fake_sim_data(parameters, shape=None):
-    """Creates a list --sim_data-- to feed to figure_posta_per_trial(). This
-    is to use figure_posta_per_trial() with any shape_pars desired, instead
-    of on relying on using --subjects--.
-
-    WILL NOT WORK WITH ANYTHING OTHER THAN EXPONENTIAL.
-
-    Parameters
-    ----------
-    pars : array-like
-        List of parameter values to use. It should be provided in the format
-        [[par1_1, par1_2, ...], [par2_1, par2_2, ...], ..., [parn_1, ...]].
-
-    Returns
-    -------
-    sim_data : list of chars
-        List of filenames of the form './data/simulated_posta_per_trial_%02d'
-        which is fed to figure_posta_per_trial(). Each filename contains the
-        simulated posteriors (in the form of --as_seen--) for the corresponding
-        parameter values.
-    """
-    if shape is None:
-        shape = 'exponential'
-
-    if shape != 'exponential':
-        raise NotImplementedError('This function only works now with' +
-                                  ' the exponential shape.')
-
-    filename_skel = './data/simulated_posta_per_trial_%02d.pi'
-    num_pars = len(parameters)
-    num_par_vals = len(parameters[0])
-    sim_data = []
-    shape_pars = []
-    for ix_num_par in range(num_pars):
-        for ix_num_par_val in range(num_par_vals):
-            sim_data.append(filename_skel %
-                            parameters[ix_num_par][ix_num_par_val])
-            shape_pars.append(
-                [shape, [parameters[ix_num_par][ix_num_par_val]]])
-    sim_data.append('./data/data_flat_per_trial.pi')
-
-    return sim_data, shape_pars
-
-
-def _get_posta_all(subjects, data_flat, as_seen_all, shape_pars_all, best_pars,
-                   no_calc):
-    """For figure_posta_per_trial().
-
-    Gets --posta_all-- for all the subjects, which contains the risk
-    pressure for all observations in --data_flat-- and the posteriors."""
-    posta_all = {}
-    rp = pr.calc_risk_pressure(data_flat)
-    for ix_subject, subject in enumerate(subjects):
-        as_seen = as_seen_all[subject]
-        if shape_pars_all is None:
-            shape_pars = invp.switch_shape_pars(
-                best_pars[subject][1][0][-1], force='list')
-        else:
-            shape_pars = shape_pars_all[ix_subject]
-        # if ix_subject == 0:
-        #     ipdb.set_trace()
-        _, posta, _, trial, _, _, le_q = invp.infer_parameters(
-            data_flat=data_flat[subject], shape_pars=shape_pars,
-            no_calc=no_calc, return_Qs=True, as_seen=as_seen)
-        if le_q is {}:
-            raise ValueError('qs empty')
-            posta = invp.calculate_posta_from_Q(20, le_q,
-                                                regresar=True, guardar=False)
-        posta_all[subject] = {
-            'rp': rp[subject], 'posta': np.squeeze(posta), 'trial': trial}
-    return posta_all
-
-
-def _pretty_plots_per_trial(maaxes, subjects, colors_avgs, colors_dots):
-    """Makes the plots in figure_posta_per_trial() prettier by moving around
-    the ticks and labels and stuff.
-    """
-    for ix_maax, maax in enumerate(maaxes):
-        maax.set_xlim([0, 35])
-        maax.set_ylim([0, 1])
-        maax.set_xticklabels(np.array(maax.get_xticks(), dtype=int) * 10)
-        maax.set_title('trial: %d' % (ix_maax + 1),
-                       loc='left', fontdict={'fontsize': 10})
-        if maax.is_last_row():
-            maax.set_xlabel('Risk pressure')
-        else:
-            maax.set_xticks([])
-        if maax.is_first_col():
-            maax.set_ylabel('P(risky)')
-        else:
-            maax.set_yticks([])
-
-    # Awesome legends!
-    if len(subjects) == 2:
-        labels = ['highSTP', 'lowSTP']
-        maax = maaxes[0]
-        for ix_sub, _ in enumerate(subjects):
-            maax.plot([], color=colors_avgs[ix_sub], label=labels[ix_sub])
-        maax.legend(fontsize=8)
-
-
-def trim_data(value, field, flata=None, create_data=False, filename=None):
-    """Takes simulated observations and keeps only those that match --offer--."""
-    if flata is None:
-        if create_data:
-            flata = new_data()
-        else:
-            if filename is None:
-                filename = './data/data_flat_per_trial.pi'
-            with open(filename, 'rb') as mafi:
-                flata = pickle.load(mafi)
-    indices = flata[field] == value
-    for field in ['choice', 'obs', 'reihe', 'threshold', 'trial']:
-        flata[field] = flata[field][indices]
-    return flata
 
 
 def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
