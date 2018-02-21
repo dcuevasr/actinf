@@ -475,7 +475,7 @@ def scatter_kappas(subjects=None, shape=None, membership=None,
         fig.clear()
         maax = fig.add_subplot(111)
 
-    best_pars = pr.loop_rank_likelihoods(subjects, shapes=[shape])
+    best_pars = ba.best_model(subjects, shapes=[shape])
     kappa = np.zeros(len(subjects))
     for subject in best_pars.keys():
         kappa[subject] = best_pars[subject][1][0][-1][1]
@@ -928,7 +928,7 @@ def figure_rp_vs_risky(subjects=None, subjects_data=None, all_others=False,
 
 def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
                            shape_pars_all=None, do_bias=True, trim=None,
-                           fignum=107):
+                           field=None, fignum=107):
     """Similar to figure_rp_vs_risky, but with data divided into trials, with
     one subplot per trial.
 
@@ -963,7 +963,7 @@ def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
         data_flat = {}
         temp_data = pickle.load(mafi)
         if not trim is None:
-            temp_data = trim_data(trim, field='reihe', flata=temp_data)
+            temp_data = trim_data(trim, field=field, flata=temp_data)
         for subject in subjects:
             data_flat[subject] = temp_data
 

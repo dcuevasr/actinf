@@ -12,6 +12,7 @@ from scipy.stats import entropy
 from scipy.stats import norm
 
 import invert_parameters as invp
+import bias_analysis as ba
 
 
 def clustering(subjects=None, k=2, clustering_type=None, shape=None,
@@ -73,9 +74,12 @@ def clustering(subjects=None, k=2, clustering_type=None, shape=None,
             likelihoods[subject].argmax(), size_space)
         ix_alpha = ix_best[0]
         alphas[subject] = all_alphas[ix_alpha]
-        if clustering_type == 'kmeans':
-            best_shapes[ix_subject, :] = np.array(
-                [shape_pars[ix + 1][ix_b] for ix, ix_b in enumerate(ix_best[1:])])
+
+    if clustering_type == 'kmeans':
+        best_bias = ba.best_model(subjects, shapes=[shape])
+        best_shapes = np.zeros((len(subjects), len(shape_pars[1:])))
+        for ix_sub, subject in enumerate(subjects):
+            best_shapes[ix_sub, :] = best_bias[subject][1][0][-1][1:]
 
     if clustering_type == 'kmedoids':
         centroids, data_dists = find_clusters_medoids(subjects, k=k, stretch=True,
