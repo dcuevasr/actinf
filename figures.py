@@ -541,7 +541,7 @@ def calc_posta_sim(shape=None, shape_pars=None, data_file=None,
         else:
             filename = './data/simulated_posta_per_trial_%02d.pi' \
                        % par_num
-        if isfile(filename) and overwrite:
+        if isfile(filename) and not overwrite:
             continue
         c_shape_pars = [shape_pars[0]] + [[shape_pars[x][par_num]]
                                           for x in range(1, len(shape_pars))]
@@ -944,9 +944,9 @@ def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
         rank_fun = pr.loop_rank_likelihoods
     else:
         rank_fun = ba.best_model
-
+    best_pars = rank_fun(subjects=subjects, number_save=1, shapes=shapes)
     if sim_data is None:
-        best_pars = rank_fun(subjects=subjects, number_save=1, shapes=shapes)
+
         no_calc = False
     else:
         no_calc = True
