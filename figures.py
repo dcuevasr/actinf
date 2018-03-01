@@ -952,7 +952,7 @@ def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
         no_calc = True
 
     if sim_data is None:
-        filename_base = './data/simulated_posta_per_trial_%02d.pi'
+        filename_base = './data/simulated_posta_per_trial_%02d_1p5.pi'
         sim_data = []
         for subject in subjects:
             sim_data.append(filename_base % best_pars[subject][1][0][-1][1])
@@ -1005,7 +1005,11 @@ def figure_posta_per_trial(subjects=None, shapes=None, sim_data=None,
                                      posta_all=this_posta,
                                      color=colors_dots[ix_sub], offset=offset,
                                      alpha=0.2)
-
+    for subject in subjects:
+        trim_data(1, field='reihe', flata=data_flat[subject])
+    posta_all = _get_posta_all(subjects, data_flat, as_seen_all, shape_pars_all,
+                               best_pars, no_calc)
+            
     for ix_sub, subject in enumerate(subjects):
         for trial in range(8):
             maax = maaxes[trial]
