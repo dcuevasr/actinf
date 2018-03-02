@@ -357,10 +357,10 @@ def _get_posta_all(subjects, data_flat, as_seen_all, shape_pars_all, best_pars,
         _, posta, _, trial, _, _, le_q = invp.infer_parameters(
             data_flat=data_flat[subject], shape_pars=shape_pars,
             no_calc=no_calc, return_Qs=True, as_seen=as_seen)
-        if le_q is {}:
-            raise ValueError('qs empty')
-            posta = invp.calculate_posta_from_Q(20, le_q,
-                                                regresar=True, guardar=False)
+        # if not le_q:
+        #     raise ValueError('qs empty')
+        #     posta = invp.calculate_posta_from_Q(20, le_q,
+        #                                         regresar=True, guardar=False)
         posta_all[subject] = {
             'rp': rp[subject], 'posta': np.squeeze(posta), 'trial': trial}
     return posta_all
@@ -1005,6 +1005,8 @@ def figure_7_posta_per_trial(subjects=None, shapes=None, sim_data=None,
     posta_all = _get_posta_all(subjects, data_flat, as_seen_all, shape_pars_all,
                                best_pars, no_calc)
 
+    return posta_all
+    
     for ix_sub, subject in enumerate(subjects):
         for trial in range(8):
             offset = ix_sub * 0.4
@@ -1028,7 +1030,7 @@ def figure_7_posta_per_trial(subjects=None, shapes=None, sim_data=None,
             these_trials = posta_all[subject]['trial'] == trial
             this_posta = {subject: {'rp': posta_all[subject]['rp'][these_trials],
                                     'posta': posta_all[subject]['posta'][these_trials, :]}}
-            pr._plot_average_risk_dynamics([subject], maaxes=[maax],
+            pr.plot_average_risk_dynamics([subject], maaxes=[maax],
                                            posta_rp=this_posta, color=colors_avgs[ix_sub])
     # Make my plots pretty.
     _pretty_plots_per_trial(maaxes, subjects, colors_avgs, colors_dots)
@@ -1068,31 +1070,49 @@ def figure_8_single_offers(subjects=None, shapes=None, offers=None, trial=4, sim
 
     no_calc = True
 
+    linestyles = ['solid', 'dashed', 'dashdot', 'dotted']
+    
     best_pars = rank_fun(subjects=subjects, number_save=1, shapes=shapes)
+
     cmap = figure_colors('lines_cmap')
     colors_avgs = np.array([cmap(x) for x in np.linspace(0, 1, 3)])
     colors_dots = colors_avgs
     colors_dots /= colors_dots.max(axis=1, keepdims=True)
 
     fig = plt.figure(fignum)
+    fig.clear()
     maax = fig.add_subplot(111)
 
     as_seen_all, data_flat = _process_sim_data(
         sim_data, subjects, best_pars, do_bias)
 
-    for offer in offers:
+    for ix_offer, offer in enumerate(offers):
         copy_flata = copy.deepcopy(data_flat)
         for subject in subjects:
             trim_data(offer, field='reihe', flata=copy_flata[subject])
+            trim_data(trial, field='trial', flata=copy_flata[subject])
         posta_all = _get_posta_all(subjects, copy_flata, as_seen_all, None,
                                    best_pars, no_calc)
         for ix_sub, subject in enumerate(subjects):
             this_posta = {subject: {'rp': posta_all[subject]['rp'],
                                     'posta': posta_all[subject]['posta']}}
-            pr.plot_average_risk_dynamics([subject], maaxes=[maax],
+            pr.plot_average_risk_dynamics([subject], maaxes=[maax], linestyles=[linestyles[ix_offer]],
                                           posta_rp=this_posta, color=colors_avgs[ix_sub])
+    _pretty_plots_per_trial([maax], subjects, colors_avgs, colors_dots)
 
+    maax.set_xlim([0, posta_all[subjects[0]]['rp'].max()])
+    xticks = np.arange(0, posta_all[subjects[0]]['rp'].max(), 5)
+    maax.set_xticks(xticks)
+    maax.set_xticklabels(xticks * 10)
+    maax.set_title('trial: %d' % trial, loc='left')
 
+    print(posta_all[1]['rp'].max())
+
+    
+    fig.tight_layout()
+    plt.show(block=False)
+
+            
 def sup_figure_behavioral_rp(subjects=range(35), bins=4, rp_range=None, fignum=201):
     """RP vs prisky, binning and averaging approach. Like figure 2, but for all
     subjects.

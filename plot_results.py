@@ -2223,16 +2223,18 @@ def _plot_average_risk_dynamics(*args, **kwargs):
     return plot_average_risk_dynamics(*args, **kwargs)
 
 
-def plot_average_risk_dynamics(subjects, posta_rp, maaxes, step_size=1,
+def plot_average_risk_dynamics(subjects, posta_rp, maaxes, linestyles=None, step_size=1,
                                 legend='', regresar=False, color=None):
     """Plots the average posterior probability of risky."""
+    if linestyles is None:
+        linestyles = ['solid'] * len(subjects)
     # color = 'brown'  # figure_colors('lines_cmap')(0.5)
     for ix_cpr, key_cpr in enumerate(subjects):
         c_posta = posta_rp[key_cpr]['posta']
         c_risk_pressure = posta_rp[key_cpr]['rp']
         average_rp, std_rp = _average_risk_dynamics(c_posta, c_risk_pressure)
         plot_x = np.arange(0, 35, step_size)
-        maaxes[ix_cpr].plot(average_rp, linewidth=2, label=legend, color=color)
+        maaxes[ix_cpr].plot(average_rp, linewidth=2, label=legend, color=color, linestyle=linestyles[ix_cpr])
         # maaxes[ix_cpr].errorbar(
         #     plot_x, average_rp, std_rp, linewidth=2, label=legend, color=color)
         maaxes[ix_cpr].set_ylim([0, 1])
