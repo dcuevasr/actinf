@@ -1081,6 +1081,7 @@ def apply_bias(as_seen, bias):
         as_seen[key][0][1] *= bias
         as_seen[key][0] = as_seen[key][0] / as_seen[key][0].sum()
 
+
 def load_or_calculate_q_file(subject, shape, create=True, force_create=False):
     """Loads the Q file for the provided subject and shape. If it is not found,
     it attempts to create it. The attempt can be turned off by --create--.
@@ -1167,6 +1168,7 @@ def transform_shape_pars(shape_indices):
             continue
         shape_values.append(shape_pars_vec[index][par_index])
     return shape_values
+
 
 def calculate_likelihood_by_condition(subjects=[0, ], save=False):
     """Calculates the likelihood for the given subjects for all parameters,
@@ -1326,6 +1328,36 @@ def maximum_likelihood_all_data(subjects):
             shape_pars_ix.insert(0, key[1])
             shape_pars = transform_shape_pars(shape_pars_ix)
     return max_logli, shape_pars
+
+
+def extreme_data():
+    """Looks through the experimental data to see whether there are last-trials in which the
+    safe option was not enough to go above threshold, but the risky one was.
+
+    Returns
+    trials : set
+    Set of trials in which it happened. Each element of the set is a tuple of (subject, number
+    of points, threshold, offer, choice).
+    """
+
+    _, flata = imda.main()
+    mabe = bc.betMDP()
+    hrew = mabe.rH * 10
+    lrew = mabe.rL * 10
+
+    trials = set()
+    for subject, flatum in enumerate(flata):
+        for ix_context, trial in enumerate(flatum['trial']):
+            if trial != 7:
+                continue
+            delta_points = max(
+                0, flatum['threshold'][ix_context] - flatum['obs'][ix_context])
+            if (delta_points < hrew[flatum['reihe'][ix_context] - 1] and
+                    delta_points > lrew[flatum['reihe'][ix_context] - 1]):
+                trials.add((subject, flatum['obs'][ix_context],
+                            flatum['threshold'][ix_context],
+                            flatum['reihe'][ix_context], flatum['choice'][ix_context]))
+    return trials
 
 
 def main(data_type, shape_pars, subject=0, data_flat=None,
