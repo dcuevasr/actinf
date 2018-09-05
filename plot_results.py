@@ -278,7 +278,7 @@ def plot_by_thres(shape_pars=None, subjects=None, trials=None, fignum=4,
 
 
 def select_by_doability(rp_lims, trials, data_flat=None, fignum=5,
-                        as_seen=None):
+                        as_seen=None, no_plot=False):
     """ Will select the obs that meet the requirement of having a so-and-so
     risk pressure. These trials will be sent to plot_by_thres for plotting.
 
@@ -329,10 +329,10 @@ def select_by_doability(rp_lims, trials, data_flat=None, fignum=5,
         for tl in range(4):  # target levels
             if datum['TargetLevels'][tl] not in datum['threshold']:
                 datum['TargetLevels'][tl] = 0
-
-    plot_by_thres(trials=trials, data_flat=data_flat, fignum=fignum,
-                  as_seen=as_seen)
-
+    if not no_plot:
+        plot_by_thres(trials=trials, data_flat=data_flat, fignum=fignum,
+                      as_seen=as_seen)
+    return data_flat
 
 def concatenate_smart(plot=True, retorno=False, fignum=6):
     """ Will get the likelihood for the whole set of subjects in one go, while
@@ -3310,3 +3310,35 @@ def plot_rp_vs_t_vs_risky_own(subjects=None, maaxes=None, posta_all=None,
         maax.scatter(posta_all[subject]['rp'], posta_all[subject]['trial'],
                      posta_all[subject]['posta'][:, 1], )
     plt.show(block=False)
+
+
+def find_dangerous_trials(subjects=None):
+    """Finds those trials in the experimental data in which, if the subject does not
+    choose the risky option, she loses, but if she wins the safe bet, she goes above
+    threshold.
+
+    Returns
+    -------
+    count : dict
+    Dictionary whose keys are those in --subjects--. Each element is the count of the
+    number of dangerous trials.
+    """
+    if subjects is None:
+        subjects = range(35)
+
+    _, flata = imda.main()
+    rL = np.array([100, 180, 145, 145, 115, 150, 170, 120], dtype=int)
+    rH = np.array([265, 260, 245, 350, 240, 190, 245, 210], dtype=int)
+
+    count = {}
+    trials = {}
+    for subject in subjects:
+        c_flata = flata[subject]
+        delta = c_flata['threshold'] - c_flata['obs']
+        high = rH[c_flata['reihe'] - 1]
+        low = rL[c_flata['reihe'] - 1]
+        trial = c_flata['trial']
+        conditions = (delta > low) * (delta <= high) * (trial == 7)
+        count[subject] = conditions.sum()
+        trials[subject] = conditions.nonzero()[0]
+    return count, trials
